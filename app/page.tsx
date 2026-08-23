@@ -10,11 +10,11 @@ import type {
 import {
   CategoryTiles,
   HomeCategoryShowcase,
-  HomeBannerCarousels,
+  HomeBanner,
   ProductRow,
   OfferBannerCarousel,
 } from "@/components/composed";
-import type { HomeCategoryShowcaseTile, HomeBannerCarouselSlide } from "@/components/composed";
+import type { HomeCategoryShowcaseTile, HomeBannerSlide } from "@/components/composed";
 import { OrganizationJsonLd, WebsiteJsonLd } from "@/components/seo";
 import { homeMetadata } from "@/lib/seo/metadata";
 import { COMPANY } from "@/lib/entity/company";
@@ -22,7 +22,7 @@ import { getSiteSettings } from "@/lib/siteSettings.server";
 import type { ApiResponse } from "@/types/api";
 import type { BrandDetail, CategoryTreeNode, ProductSummary } from "@/types/catalog";
 import type { Offer, OfferBanner, PublicListOffersResponse } from "@/types/offer";
-import type { HomeCategoryShowcaseCategoryRef, SiteSettingsHomeBannerCarouselItem } from "@/types/siteSettings";
+import type { HomeCategoryShowcaseCategoryRef, SiteSettingsHomeBannerSlide } from "@/types/siteSettings";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:50001";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -163,23 +163,16 @@ export default async function HomePage() {
       };
     });
 
-  // Homepage dual banner carousels - admin-managed at /admin/offers. Each
-  // side is its own ordered, active-only slide list.
-  const toBannerSlides = (items: SiteSettingsHomeBannerCarouselItem[] | undefined): HomeBannerCarouselSlide[] =>
-    (items ?? [])
-      .filter((item) => item.isActive)
-      .sort((a, b) => a.order - b.order)
-      .map((item) => ({ key: item._id, image: item.image, href: item.href || undefined }));
-  const homeBannerCarouselsLeft = toBannerSlides(siteSettings?.homeBannerCarousels?.left);
-  const homeBannerCarouselsRight = toBannerSlides(siteSettings?.homeBannerCarousels?.right);
-
-  // Mobile/tablet split of the banner pair: first carousel keeps the top
-  // spot, the second renders after the Featured row (no back-to-back stack).
-  // If the left list is empty the right one takes the top spot instead.
-  const mobileFirstBanner =
-    homeBannerCarouselsLeft.length > 0 ? homeBannerCarouselsLeft : homeBannerCarouselsRight;
-  const mobileSecondBanner =
-    homeBannerCarouselsLeft.length > 0 ? homeBannerCarouselsRight : [];
+  // Homepage banner - one ordered, active-only slide list, admin-managed at
+  // /admin/offers. Renders directly under the navbar.
+  const homeBannerSlides: HomeBannerSlide[] = (siteSettings?.homeBanner ?? [])
+    .filter((item: SiteSettingsHomeBannerSlide) => item.isActive && item.image)
+    .sort((a: SiteSettingsHomeBannerSlide, b: SiteSettingsHomeBannerSlide) => a.order - b.order)
+    .map((item: SiteSettingsHomeBannerSlide) => ({
+      key: item._id,
+      image: item.image,
+      href: item.href || undefined,
+    }));
 
   const navCategories = categoryTree.map(toNavCategory);
   const navBrands: BrandLite[] = brandList.map((b) => ({
@@ -235,19 +228,13 @@ export default async function HomePage() {
           profile, sticky search + category tabs, offer banner. */}
       <MobileHomeHeader categories={navCategories} banners={homepageBanners} />
 
+      {/* Homepage banner - one full-width carousel directly under the header,
+          admin-managed at /admin/offers. Renders nothing when no slides are
+          active, so the category strip simply moves up. */}
+      <HomeBanner slides={homeBannerSlides} />
+
       {/* Shop-by-category strip - admin-managed at /admin/offers */}
       <HomeCategoryShowcase items={homeCategoryShowcaseTiles} />
-
-      {/* Dual promo banner carousels - admin-managed at /admin/offers.
-          Desktop (lg+): the original side-by-side pair. Mobile/tablet: only
-          the first banner here - the second one renders after the Featured
-          row instead of stacking back-to-back. */}
-      <div className="hidden lg:block">
-        <HomeBannerCarousels left={homeBannerCarouselsLeft} right={homeBannerCarouselsRight} />
-      </div>
-      <div className="lg:hidden">
-        <HomeBannerCarousels left={mobileFirstBanner} right={[]} />
-      </div>
 
       {/* Offer carousel - full bleed on desktop; on mobile it already renders
           inside the purple MobileHomeHeader block. */}
@@ -270,16 +257,6 @@ export default async function HomePage() {
             products={featured}
             viewAllHref="/all-products?sort=popular"
           />
-        ) : null}
-
-        {/* Second promo banner - mobile/tablet only, moved here from the
-            banner pair up top so the two sliders don't stack back-to-back.
-            Negative margins cancel main's container-screen gutters so it
-            runs full-bleed like the first one. */}
-        {mobileSecondBanner.length > 0 ? (
-          <div className="-mx-4 md:-mx-6 lg:hidden">
-            <HomeBannerCarousels left={mobileSecondBanner} right={[]} />
-          </div>
         ) : null}
 
         {/* New arrivals */}

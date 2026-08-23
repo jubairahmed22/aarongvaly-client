@@ -49,6 +49,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
   const [hovered, setHovered] = React.useState(false);
   const [visible, setVisible] = React.useState(true);
   const [drag, setDrag] = React.useState(0);
+  const [dragging, setDragging] = React.useState(false);
   const [reducedMotion, setReducedMotion] = React.useState(false);
 
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -89,7 +90,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
     };
   }, []);
 
-  const paused = hovered || !visible || dragStartX.current !== null;
+  const paused = hovered || !visible || dragging;
 
   React.useEffect(() => {
     if (count <= 1 || autoplayMs <= 0 || paused || reducedMotion) return;
@@ -102,6 +103,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
   const onTouchStart = (e: React.TouchEvent) => {
     if (count <= 1) return;
     dragStartX.current = e.touches[0]?.clientX ?? null;
+    setDragging(true);
   };
   const onTouchMove = (e: React.TouchEvent) => {
     if (dragStartX.current === null) return;
@@ -112,6 +114,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
       go(index + (drag > 0 ? -1 : 1));
     }
     dragStartX.current = null;
+    setDragging(false);
     setDrag(0);
   };
 
@@ -137,7 +140,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
       <div className="mx-auto w-full py-0 lg:w-[82%] lg:py-6">
         <div
           ref={rootRef}
-          className="relative aspect-[2/1] w-full overflow-hidden bg-neutral-100 lg:aspect-[3/1] lg:rounded-2xl"
+          className="group/banner relative aspect-[2/1] w-full overflow-hidden bg-neutral-100 lg:aspect-[3/1] lg:rounded-2xl"
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onFocusCapture={() => setHovered(true)}
@@ -153,7 +156,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
             className={cn("flex h-full w-full", !reducedMotion && "transition-transform duration-500 ease-out")}
             style={{
               transform: `translate3d(calc(${-index * 100}% + ${drag}px), 0, 0)`,
-              transitionDuration: dragStartX.current !== null ? "0ms" : undefined,
+              transitionDuration: dragging ? "0ms" : undefined,
             }}
           >
             {slides.map((slide, i) => (
@@ -249,7 +252,7 @@ function BannerSlide({
       loading={priority ? "eager" : "lazy"}
       fetchPriority={priority ? "high" : "auto"}
       decoding={priority ? "sync" : "async"}
-									draggable={false}
+      draggable={false}
     />
   );
 

@@ -103,28 +103,19 @@ export interface SiteSettingsHomeCategoryShowcaseItem {
 }
 
 /**
- * One slide in a homepage banner carousel. Deliberately just an image + a
- * link - no title/subtitle/CTA text - since the whole banner is the click
- * target and any copy lives inside the uploaded artwork itself. `href` empty
- * means the slide isn't clickable.
+ * One slide in the homepage banner - the single full-width carousel that sits
+ * directly under the navbar. Deliberately just an image + a link - no
+ * title/subtitle/CTA text - since the whole banner is the click target and any
+ * copy lives inside the uploaded artwork itself. `href` empty means the slide
+ * isn't clickable.
  */
-export interface SiteSettingsHomeBannerCarouselItem {
+export interface SiteSettingsHomeBannerSlide {
   _id: string;
   image: string;
   imagePublicId?: string;
   href: string;
   order: number;
   isActive: boolean;
-}
-
-/**
- * Two independent side-by-side banner carousels shown right under the
- * homepage category showcase (Zepto's paired-promo-card layout). `left` and
- * `right` rotate on their own schedules.
- */
-export interface SiteSettingsHomeBannerCarousels {
-  left: SiteSettingsHomeBannerCarouselItem[];
-  right: SiteSettingsHomeBannerCarouselItem[];
 }
 
 export interface SiteSettingsIntegrations {
@@ -177,7 +168,7 @@ export interface SiteSettings {
   announcementBar?: SiteSettingsAnnouncementBar;
   heroBanner?: SiteSettingsHeroBanner;
   homeCategoryShowcase?: SiteSettingsHomeCategoryShowcaseItem[];
-  homeBannerCarousels?: SiteSettingsHomeBannerCarousels;
+  homeBanner?: SiteSettingsHomeBannerSlide[];
   contact: SiteSettingsContact;
   termsAndConditions: string;
   returnPolicy: string;
@@ -219,11 +210,8 @@ export interface UpdateSiteSettingsBody {
     category: string;
     isActive?: boolean;
   }>;
-  /** Full ordered replace per side - each list is submitted whole on every save. */
-  homeBannerCarousels?: {
-    left?: Array<{ _id?: string; image: string; imagePublicId?: string; href?: string; isActive?: boolean }>;
-    right?: Array<{ _id?: string; image: string; imagePublicId?: string; href?: string; isActive?: boolean }>;
-  };
+  /** Full ordered replace - the whole slide list is submitted on every save. */
+  homeBanner?: Array<{ _id?: string; image: string; imagePublicId?: string; href?: string; isActive?: boolean }>;
   contact?: Partial<SiteSettingsContact>;
   termsAndConditions?: string;
   returnPolicy?: string;

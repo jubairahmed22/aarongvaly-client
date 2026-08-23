@@ -342,7 +342,7 @@ function SidebarContent({
           alt={COMPANY.name}
           width={32}
           height={32}
-          className="shrink-0 rounded-[4px]"
+          className="shrink-0"
           priority
         />
         {!collapsed && (

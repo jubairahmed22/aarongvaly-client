@@ -30,6 +30,12 @@ export interface UserMenuProps {
   variant?: "dark" | "light";
   /** Icon-above-label layout (Zepto-style "Login"/account name under the icon) instead of a plain icon circle. */
   stacked?: boolean;
+  /**
+   * Icon-beside-label layout ("Sign In" / the account's first name on one
+   * line), matching the "Shopping Cart" and "My Wish List" items it sits
+   * next to in the desktop header. Ignored when `stacked` is set.
+   */
+  showLabel?: boolean;
 }
 
 /**
@@ -41,7 +47,7 @@ export interface UserMenuProps {
  *   resolves as authenticated.
  * - Authed → opens a dropdown with role-aware items + sign out.
  */
-export function UserMenu({ variant = "dark", stacked = false }: UserMenuProps = {}) {
+export function UserMenu({ variant = "dark", stacked = false, showLabel = false }: UserMenuProps = {}) {
   const router = useRouter();
   const { user, hasRole } = useAuth();
   const light = variant === "light";
@@ -56,12 +62,20 @@ export function UserMenu({ variant = "dark", stacked = false }: UserMenuProps = 
           "inline-flex items-center justify-center transition-colors",
           stacked
             ? "flex-col gap-0.5 rounded-md px-2.5 py-1"
-            : "h-[40px] w-[40px] rounded-full",
+            : showLabel
+              ? "gap-[8px] text-[14px] hover:text-accent"
+              : "h-[40px] w-[40px] rounded-full",
           light ? "text-ink hover:bg-neutral-100" : "text-paper hover:bg-white/10",
+          showLabel && !stacked && "hover:bg-transparent",
         )}
       >
-        <UserIcon className={stacked ? "h-[15px] w-[15px]" : "h-[22px] w-[22px]"} aria-hidden />
+        <UserIcon
+          className={stacked ? "h-[15px] w-[15px]" : showLabel ? "h-[19px] w-[19px]" : "h-[22px] w-[22px]"}
+          strokeWidth={showLabel && !stacked ? 1.7 : undefined}
+          aria-hidden
+        />
         {stacked ? <span className="text-[13px] font-semibold leading-none">Login</span> : null}
+        {showLabel && !stacked ? <span>Sign In</span> : null}
       </Link>
     );
   }
@@ -89,18 +103,26 @@ export function UserMenu({ variant = "dark", stacked = false }: UserMenuProps = 
           "inline-flex items-center justify-center transition-colors",
           stacked
             ? "flex-col gap-0.5 rounded-md px-2.5 py-1"
-            : "h-[40px] w-[40px] rounded-full",
+            : showLabel
+              ? "gap-[8px] text-[14px] hover:text-accent"
+              : "h-[40px] w-[40px] rounded-full",
           light ? "hover:bg-neutral-100" : "hover:bg-white/10",
+          showLabel && !stacked && "hover:bg-transparent",
         )}
       >
         <Avatar
           src={user.image}
           alt={user.name ?? user.email}
-          size={stacked ? 24 : 32}
-          className={stacked ? "h-[24px] w-[24px]" : "h-[32px] w-[32px]"}
+          size={stacked || showLabel ? 24 : 32}
+          className={stacked || showLabel ? "h-[24px] w-[24px]" : "h-[32px] w-[32px]"}
         />
         {stacked ? (
           <span className={cn("max-w-[72px] truncate text-[13px] font-semibold leading-none", light ? "text-ink" : "text-paper")}>
+            {user.name?.split(" ")[0] || "Account"}
+          </span>
+        ) : null}
+        {showLabel && !stacked ? (
+          <span className={cn("max-w-[96px] truncate", light ? "text-ink" : "text-paper")}>
             {user.name?.split(" ")[0] || "Account"}
           </span>
         ) : null}

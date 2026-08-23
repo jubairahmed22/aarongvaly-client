@@ -25,6 +25,10 @@ interface UIState {
   // generic drawer (e.g. cart drawer)
   cartDrawerOpen: boolean;
   setCartDrawerOpen: (open: boolean) => void;
+
+  // full-width search overlay dropped from the navbar's Search button
+  searchOpen: boolean;
+  setSearchOpen: (open: boolean) => void;
 }
 
 const genId = (): string =>
@@ -56,4 +60,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   cartDrawerOpen: false,
   setCartDrawerOpen: (open) => set({ cartDrawerOpen: open }),
+
+  searchOpen: false,
+  setSearchOpen: (open) => set({ searchOpen: open }),
 }));

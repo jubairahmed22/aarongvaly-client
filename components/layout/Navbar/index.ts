@@ -9,3 +9,5 @@ export {
 } from "./CategoryMenu";
 export { MobileMenu, type MobileMenuProps } from "./MobileMenu";
 export { UserMenu, SignInLink } from "./UserMenu";
+export { DepartmentStrip, type DepartmentStripProps } from "./DepartmentStrip";
+export { SearchOverlay } from "./SearchOverlay";

@@ -12,7 +12,7 @@ import { useAdminOffers } from "@/hooks/useOffer";
 import { AdminError } from "@/lib/api/admin";
 import type { AdminListOffersParams, Offer, OfferStatus } from "@/types/offer";
 import { HomeCategoryShowcaseSection } from "./HomeCategoryShowcaseSection";
-import { HomeBannerCarouselsSection } from "./HomeBannerCarouselsSection";
+import { HomeBannerSection } from "./HomeBannerSection";
 
 const STATUS_FILTERS: { value: "all" | OfferStatus; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -159,7 +159,7 @@ export function OffersAdminClient() {
 
       <HomeCategoryShowcaseSection />
 
-      <HomeBannerCarouselsSection />
+      <HomeBannerSection />
 
       {/* Filter bar - Flowbite table toolbar */}
       <div className="flex flex-col gap-[12px] rounded-[8px] border border-gray-200 bg-white p-[16px] shadow-sm lg:flex-row lg:items-center">

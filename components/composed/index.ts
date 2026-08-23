@@ -32,10 +32,10 @@ export {
   type HomeCategoryShowcaseTile,
 } from "./HomeCategoryShowcase";
 export {
-  HomeBannerCarousels,
-  type HomeBannerCarouselsProps,
-  type HomeBannerCarouselSlide,
-} from "./HomeBannerCarousels";
+  HomeBanner,
+  type HomeBannerProps,
+  type HomeBannerSlide,
+} from "./HomeBanner";
 export { ProductRow, type ProductRowProps } from "./ProductRow";
 export { ImageUploader, type ImageUploaderProps } from "./ImageUploader";
 export {

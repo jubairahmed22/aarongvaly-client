@@ -6,7 +6,7 @@ import { PolicyLayout, PolicyEmpty } from "@/components/layout/PolicyLayout";
 import { contentMetadata } from "@/lib/seo/metadata";
 import { getSiteSettings } from "@/lib/siteSettings.server";
 import { COMPANY } from "@/lib/entity/company";
-asdfasdfas
+
 export const revalidate = 300;
 
 export const metadata: Metadata = contentMetadata({

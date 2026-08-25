@@ -37,6 +37,14 @@ export const COMPANY = {
     "https://instagram.com/aarongvaly",
   ],
   email: "support@aarongvaly.com",
+  /**
+   * Support opening hours shown in the footer's Customer Service column.
+   *
+   * PLACEHOLDER - SiteSettings has no business-hours field, so this is not
+   * admin-editable yet. Edit it here, or ask for a `contact.supportHours`
+   * field to be added to SiteSettings + the admin form.
+   */
+  supportHours: "Sunday–Thursday (10:30 AM–5:00 PM)",
 } as const;
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {

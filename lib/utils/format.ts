@@ -4,10 +4,33 @@
  * "Tk 1,23,456" (Indian-style grouping) which is what `en-IN` produces.
  */
 
-export function formatPrice(amount: number, currency = "BDT"): string {
-  if (currency === "BDT") return `Tk ${amount.toLocaleString("en-IN")}`;
+export interface FormatPriceOptions {
+  /**
+   * Force two decimal places ("Tk 3,295.00"). Off by default because most
+   * surfaces show whole taka; the collection grid opts in to match the
+   * fashion-retail convention of always pricing to the paisa.
+   */
+  decimals?: boolean;
+}
+
+export function formatPrice(
+  amount: number,
+  currency = "BDT",
+  opts: FormatPriceOptions = {},
+): string {
+  const fractionDigits = opts.decimals ? 2 : 0;
+  if (currency === "BDT") {
+    return `Tk ${amount.toLocaleString("en-IN", {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    })}`;
+  }
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      ...(opts.decimals ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : {}),
+    }).format(amount);
   } catch {
     return `${currency} ${amount.toLocaleString()}`;
   }

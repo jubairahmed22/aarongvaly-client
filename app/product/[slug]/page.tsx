@@ -13,6 +13,7 @@ import type { PublicCustomizationConfig } from "@/types/customization";
 import { ProductDetailClient } from "./ProductDetailClient";
 import { ProductInfoSections } from "./ProductInfoSections";
 import { RelatedProducts } from "./RelatedProducts";
+import { RecentlyViewed } from "./RecentlyViewed";
 import { ReviewsSection } from "./ReviewsSection";
 import { QASection } from "./QASection";
 
@@ -126,7 +127,8 @@ export default async function ProductPage({ params }: PageProps) {
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Navbar />
       <main className="mx-auto w-full flex-1 px-2 py-4 sm:py-6 lg:w-[82%] lg:max-w-none lg:px-0">
-        <Breadcrumb items={crumbs} />
+        {/* Centered breadcrumb, as on the reference site */}
+        <Breadcrumb items={crumbs} className="py-2 [&>ol]:justify-center" />
         <ProductDetailClient product={product} customizationConfig={customizationConfig} siteSettings={settings} className="mt-2" />
         <ProductInfoSections product={product} settings={settings} className="mt-4" />
         <ReviewsSection
@@ -149,6 +151,7 @@ export default async function ProductPage({ params }: PageProps) {
         {related.length > 0 ? (
           <RelatedProducts products={related} className="mt-4" />
         ) : null}
+        <RecentlyViewed currentSlug={product.slug} className="mt-2" />
       </main>
       <Footer />
 

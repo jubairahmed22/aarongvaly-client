@@ -4,31 +4,27 @@ import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Clock,
-  FileText,
-  Lock,
-  Minus,
-  Plus,
-  ShoppingCart,
-  Tag,
-  Trash2,
-} from "lucide-react";
+import { ClipboardList, Lock, Minus, Plus, ShoppingBag, SquarePen, X } from "lucide-react";
 import { Drawer } from "@/components/complex";
 import { Spinner } from "@/components/ui";
-import { buttonVariants } from "@/components/ui/Button";
 import { useUIStore } from "@/store/uiStore";
 import { useUnifiedCart, type UnifiedCartItem } from "@/hooks/useUnifiedCart";
 import { usePublicSiteSettings } from "@/hooks/useSiteSettings";
 import { formatPrice } from "@/lib/utils/format";
+import { cn } from "@/lib/utils/cn";
 import { startRouteProgress } from "./RouteProgress";
 
 /**
- * Header cart drawer - Zepto/Blinkit-style slide-out: coupons teaser,
- * "Delivering in minutes" line list with a per-row qty stepper, and a bill
- * summary card with a sticky checkout CTA. Shares its cart data with the
- * full /cart page via `useUnifiedCart` so quantities and totals never drift
- * between the two surfaces.
+ * Header cart drawer, in the same editorial language as the collection grid:
+ * square corners, hairline rules instead of stacked cards, prices to the
+ * paisa, and an ink CHECKOUT bar over an outlined VIEW CART.
+ *
+ * Replaces an earlier grocery-style panel (orange stepper, green prices,
+ * "Delivering in minutes"). The delivery-speed framing was wrong for a
+ * clothing store — nothing here ships in minutes.
+ *
+ * Shares cart state with the full /cart page via `useUnifiedCart`, so
+ * quantities and totals never drift between the two surfaces.
  */
 export function CartDrawer() {
   const open = useUIStore((s) => s.cartDrawerOpen);
@@ -36,9 +32,30 @@ export function CartDrawer() {
   const close = React.useCallback(() => setOpen(false), [setOpen]);
 
   return (
-    <Drawer open={open} onClose={close} side="right" title="Cart" widthClassName="w-[92vw] sm:w-[420px] lg:w-[440px]">
+    <Drawer
+      open={open}
+      onClose={close}
+      side="right"
+      title={<CartDrawerTitle />}
+      widthClassName="w-[92vw] sm:w-[440px] lg:w-[464px]"
+    >
       <CartDrawerBody onClose={close} />
     </Drawer>
+  );
+}
+
+/** "Shopping Cart" over a live item count, as one node for the Drawer header. */
+function CartDrawerTitle() {
+  const { items, itemCount } = useUnifiedCart();
+  return (
+    <span className="block py-[6px]">
+      <span className="block text-[20px] font-bold leading-tight text-ink">Shopping Cart</span>
+      {items.length > 0 ? (
+        <span className="mt-[2px] block text-[14px] font-normal text-neutral-500">
+          {itemCount} {itemCount === 1 ? "item" : "items"}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -51,7 +68,6 @@ function CartDrawerBody({ onClose }: { onClose: () => void }) {
     items,
     subtotal,
     currency,
-    itemCount,
     isAuthed,
     isLoading,
     appliedCoupon,
@@ -80,18 +96,18 @@ function CartDrawerBody({ onClose }: { onClose: () => void }) {
 
   if (items.length === 0) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-[12px] px-[24px] text-center">
-        <div className="flex h-[56px] w-[56px] items-center justify-center rounded-full bg-gray-100">
-          <ShoppingCart className="h-[24px] w-[24px] text-gray-400" aria-hidden />
-        </div>
+      <div className="flex h-[70vh] flex-col items-center justify-center gap-[16px] px-[32px] text-center">
+        <ShoppingBag className="h-[32px] w-[32px] text-neutral-300" strokeWidth={1.25} aria-hidden />
         <div>
-          <p className="text-[16px] font-semibold text-gray-900">Your cart is empty</p>
-          <p className="mt-[4px] text-[14px] text-gray-500">Add something to get started.</p>
+          <p className="text-[15px] font-bold text-ink">Your cart is empty</p>
+          <p className="mt-[6px] text-[13px] text-neutral-500">
+            Once you add something, it will show up here.
+          </p>
         </div>
         <Link
           href="/all-products"
           onClick={onClose}
-          className={buttonVariants({ variant: "accent", size: "md", className: "mt-[4px] rounded-[8px]" })}
+          className="mt-[8px] border border-neutral-300 px-[28px] py-[13px] text-[13px] font-medium uppercase tracking-[0.10em] text-ink transition-colors hover:bg-ink hover:text-paper"
         >
           Start shopping
         </Link>
@@ -99,138 +115,117 @@ function CartDrawerBody({ onClose }: { onClose: () => void }) {
     );
   }
 
+  /**
+   * The delivery note the reference states flatly ("Delivery is FREE
+   * nationwide") is derived here instead, so it can't contradict the store's
+   * actual freeShippingThreshold setting.
+   */
+  const deliveryNote =
+    freeThreshold <= 0 || isFree
+      ? "Taxes to be included at checkout. Delivery is FREE nationwide."
+      : `Taxes to be included at checkout. Spend ${formatPrice(amountToFree, currency, {
+          decimals: true,
+        })} more for free delivery.`;
+
   return (
-    <>
-    <div className="flex flex-col gap-[12px] bg-gray-50 p-[12px]">
-      {/* Coupons & offers */}
-      <div className="rounded-[8px] border border-gray-200 bg-white p-[16px]">
-        <h3 className="text-[15px] font-bold text-gray-900">Coupons &amp; offers</h3>
-        {isAuthed ? (
-          appliedCoupon ? (
-            <div className="mt-[10px] flex items-center gap-[8px] rounded-[8px] border border-green-200 bg-green-50 px-[12px] py-[10px] text-[13px]">
-              <Tag className="h-[14px] w-[14px] shrink-0 text-green-600" aria-hidden />
-              <span className="font-bold text-green-800">{appliedCoupon.code}</span>
-              <span className="text-green-600">applied</span>
-            </div>
+    // min-h-full + flex-1 spacer pins the summary and CTAs to the bottom of
+    // the drawer when the item list is short, and lets them scroll away
+    // naturally once it isn't.
+    <div className="flex min-h-full flex-col">
+      <ul>
+        {items.map((item) => (
+          <CartDrawerRow
+            key={item.id}
+            item={item}
+            currency={currency}
+            onQtyChange={onQtyChange}
+            onRemove={onRemove}
+            onNavigate={onClose}
+          />
+        ))}
+      </ul>
+
+      <div className="flex-1" />
+
+      {/* ── Coupon ── */}
+      <div className="flex justify-center px-[24px] pb-[22px] pt-[32px]">
+        <Link
+          href={isAuthed ? "/cart" : "/login?next=/cart"}
+          onClick={onClose}
+          aria-label={
+            appliedCoupon ? `Coupon ${appliedCoupon.code} applied` : "Apply a coupon"
+          }
+          title={appliedCoupon ? `${appliedCoupon.code} applied` : "Apply a coupon"}
+          className={cn(
+            "flex h-[62px] w-[78px] items-center justify-center border transition-colors",
+            appliedCoupon
+              ? "border-ink text-ink"
+              : "border-neutral-300 text-neutral-600 hover:border-ink hover:text-ink",
+          )}
+        >
+          {isAuthed ? (
+            <ClipboardList className="h-[22px] w-[22px]" strokeWidth={1.5} aria-hidden />
           ) : (
-            <Link
-              href="/cart"
-              onClick={onClose}
-              className="mt-[10px] flex items-center gap-[10px] text-[13px] font-medium text-gray-500 transition-colors hover:text-accent"
-            >
-              <Tag className="h-[15px] w-[15px] shrink-0 text-gray-400" aria-hidden />
-              Have a coupon? Apply it at checkout
-            </Link>
-          )
-        ) : (
-          <Link
-            href="/login?next=/cart"
-            onClick={onClose}
-            className="mt-[10px] flex items-center justify-center gap-[8px] py-[6px] text-[14px] font-semibold text-gray-900"
-          >
-            <Lock className="h-[15px] w-[15px] text-gray-400" aria-hidden />
-            Login to view coupons
-          </Link>
-        )}
+            <Lock className="h-[20px] w-[20px]" strokeWidth={1.5} aria-hidden />
+          )}
+        </Link>
       </div>
 
-      {/* Delivering in minutes / item list */}
-      <div className="rounded-[8px] border border-gray-200 bg-white">
-        <div className="flex items-center gap-[10px] px-[16px] py-[14px]">
-          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500">
-            <Clock className="h-[15px] w-[15px]" aria-hidden />
+      {/* ── Summary + CTAs ── */}
+      <div className="px-[24px] pb-[24px]">
+        <div className="flex items-center justify-between text-[15px]">
+          <span className="font-bold text-ink">Subtotal:</span>
+          <span className="font-bold text-ink">
+            {formatPrice(subtotal, currency, { decimals: true })}
           </span>
-          <div>
-            <p className="text-[14px] font-bold text-gray-900">Delivering in minutes</p>
-            <p className="text-[12px] text-gray-500">
-              {itemCount} {itemCount === 1 ? "item" : "items"}
-            </p>
+        </div>
+
+        {isAuthed && discount > 0 ? (
+          <div className="mt-[10px] flex items-center justify-between text-[15px]">
+            <span className="font-bold text-ink">Discount:</span>
+            <span className="font-bold text-ink">
+              −{formatPrice(discount, currency, { decimals: true })}
+            </span>
           </div>
+        ) : null}
+
+        <div className="mt-[10px] flex items-center justify-between">
+          <span className="text-[15px] font-bold text-ink">Total:</span>
+          <span className="text-[19px] font-bold text-ink">
+            {formatPrice(isAuthed ? total : subtotal, currency, { decimals: true })}
+          </span>
         </div>
 
-        <ul className="divide-y divide-gray-100 border-t border-gray-100">
-          {items.map((item) => (
-            <CartDrawerRow key={item.id} item={item} currency={currency} onQtyChange={onQtyChange} onRemove={onRemove} onNavigate={onClose} />
-          ))}
-        </ul>
+        <p className="mt-[14px] text-[14px] leading-relaxed text-neutral-500">
+          {isAuthed
+            ? deliveryNote
+            : "Log in to see your exact total. Charges and discounts are calculated from your delivery details."}
+        </p>
 
-        <div className="border-t border-gray-100 px-[16px] py-[12px] text-center">
-          <span className="text-[13px] text-gray-500">Forgot something? </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[13px] font-bold text-accent hover:underline"
-          >
-            Add More Items
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          onClick={goCheckout}
+          className="mt-[20px] flex h-[56px] w-full items-center justify-center gap-[8px] bg-ink text-[15px] font-medium uppercase tracking-[0.10em] text-paper transition-colors hover:bg-neutral-800"
+        >
+          {isAuthed ? (
+            "Checkout"
+          ) : (
+            <>
+              <Lock className="h-[14px] w-[14px]" aria-hidden />
+              Log in to checkout
+            </>
+          )}
+        </button>
 
-      {/* Free delivery nudge */}
-      {freeThreshold > 0 && !isFree ? (
-        <div className="flex items-center gap-[8px] rounded-[8px] border border-amber-200 bg-amber-50 px-[12px] py-[10px] text-[12.5px] text-amber-800">
-          Add <span className="font-bold">{formatPrice(amountToFree, currency)}</span> more for free delivery
-        </div>
-      ) : null}
-
-      {/* Bill summary */}
-      <div className="rounded-[8px] border border-gray-200 bg-white p-[16px]">
-        <div className="flex items-center gap-[10px]">
-          <FileText className="h-[16px] w-[16px] text-gray-400" aria-hidden />
-          <h3 className="text-[15px] font-bold text-gray-900">Bill Summary</h3>
-        </div>
-
-        <div className="mt-[12px] flex items-center justify-between text-[14px]">
-          <span className="text-gray-600">Item Total</span>
-          <span className="font-semibold text-gray-900">{formatPrice(subtotal, currency)}</span>
-        </div>
-
-        {isAuthed ? (
-          <>
-            {discount > 0 ? (
-              <div className="mt-[8px] flex items-center justify-between text-[14px]">
-                <span className="text-gray-600">Discount</span>
-                <span className="font-semibold text-green-600">−{formatPrice(discount, currency)}</span>
-              </div>
-            ) : null}
-            <div className="mt-[10px] flex items-center justify-between border-t border-gray-100 pt-[10px] text-[15px]">
-              <span className="font-bold text-gray-900">To Pay</span>
-              <span className="font-bold text-gray-900">{formatPrice(total, currency)}</span>
-            </div>
-            <p className="mt-[4px] text-[11px] text-gray-400">Delivery charges calculated at checkout.</p>
-          </>
-        ) : (
-          <div className="mt-[12px] rounded-[8px] bg-amber-50 px-[12px] py-[10px] text-[12.5px] leading-relaxed text-amber-800">
-            Log in to see your exact total. Applicable charges and discounts will be calculated based on your
-            delivery details.
-          </div>
-        )}
+        <Link
+          href="/cart"
+          onClick={onClose}
+          className="mt-[12px] flex h-[56px] w-full items-center justify-center border border-neutral-300 text-[15px] font-medium uppercase tracking-[0.10em] text-ink transition-colors hover:border-ink"
+        >
+          View cart
+        </Link>
       </div>
     </div>
-
-    {/* Sticky checkout CTA - a sibling of the scrollable content (not nested
-        inside its padding), so `sticky bottom-0` pins it flush against the
-        bottom of the drawer's own scroll viewport with no offset hacks. */}
-    <div className="sticky bottom-0 z-10 border-t border-gray-200 bg-white p-[12px]">
-      <button
-        type="button"
-        onClick={goCheckout}
-        className="flex h-[48px] w-full items-center justify-center gap-[8px] rounded-[8px] bg-accent text-[15px] font-bold text-white transition-colors hover:bg-accent-dark"
-      >
-        {isAuthed ? (
-          <>
-            <ShoppingCart className="h-[16px] w-[16px]" aria-hidden />
-            Proceed to Checkout
-          </>
-        ) : (
-          <>
-            <Lock className="h-[14px] w-[14px]" aria-hidden />
-            Login to Proceed
-          </>
-        )}
-      </button>
-    </div>
-    </>
   );
 }
 
@@ -244,75 +239,134 @@ interface CartDrawerRowProps {
 
 function CartDrawerRow({ item, currency, onQtyChange, onRemove, onNavigate }: CartDrawerRowProps) {
   const onSale = typeof item.originalPrice === "number" && item.originalPrice > item.price;
+  const atStockCap = item.stock !== undefined && item.qty >= item.stock;
+  const optionLine = formatOptionLine(item.options);
 
   return (
-    <li className="flex gap-[10px] px-[16px] py-[12px]">
+    <li className="flex gap-[18px] border-b border-neutral-200 px-[24px] py-[22px]">
+      {/* 3:4 crop, matching the collection card so the same photo doesn't
+          change shape between the grid and the cart. */}
       <Link
         href={`/product/${item.slug}`}
         onClick={onNavigate}
-        className="relative h-[52px] w-[52px] shrink-0 overflow-hidden rounded-[8px] border border-gray-100 bg-gray-50"
+        className="relative h-[124px] w-[93px] shrink-0 overflow-hidden bg-[#F2F3F4]"
       >
         {item.image ? (
-          <Image src={item.image} alt={item.title} fill sizes="52px" className="object-cover" />
+          <Image src={item.image} alt={item.title} fill sizes="93px" className="object-cover" />
         ) : null}
       </Link>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-[4px]">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Link
           href={`/product/${item.slug}`}
           onClick={onNavigate}
-          className="line-clamp-2 text-[13px] font-semibold leading-snug text-gray-900 hover:text-accent"
+          className="text-[15px] font-medium leading-snug text-ink transition-colors hover:text-accent"
         >
           {item.title}
         </Link>
-        {item.options && Object.keys(item.options).length > 0 ? (
-          <p className="truncate text-[11.5px] text-gray-500">
-            {Object.entries(item.options).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-          </p>
+
+        {optionLine ? (
+          // The pencil goes back to the PDP, which is where a different size
+          // or colour is actually chosen — the drawer has no variant picker.
+          <Link
+            href={`/product/${item.slug}`}
+            onClick={onNavigate}
+            className="mt-[8px] flex items-center gap-[8px] text-[13px] uppercase tracking-[0.04em] text-neutral-500 transition-colors hover:text-ink"
+          >
+            <span className="truncate">{optionLine}</span>
+            <SquarePen className="h-[15px] w-[15px] shrink-0" strokeWidth={1.5} aria-hidden />
+          </Link>
         ) : null}
 
-        <div className="mt-[2px] flex items-center justify-between gap-[8px]">
-          <div className="flex items-baseline gap-[6px]">
-            <span className="text-[13px] font-bold text-green-700">{formatPrice(item.price, currency)}</span>
-            {onSale ? (
-              <span className="text-[11px] text-gray-400 line-through">
-                {formatPrice(item.originalPrice!, currency)}
-              </span>
-            ) : null}
+        <p className="mt-[8px] flex items-baseline gap-[8px]">
+          <span className="text-[15px] font-bold text-ink">
+            {formatPrice(item.price, currency, { decimals: true })}
+          </span>
+          {onSale ? (
+            <span className="text-[12px] text-neutral-400 line-through">
+              {formatPrice(item.originalPrice!, currency, { decimals: true })}
+            </span>
+          ) : null}
+        </p>
+
+        <div className="mt-[14px] flex items-center justify-between gap-[12px]">
+          <div className="flex h-[44px] items-center border border-neutral-300">
+            <StepperButton
+              label="Decrease quantity"
+              onClick={() => onQtyChange(item, item.qty - 1)}
+            >
+              <Minus className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden />
+            </StepperButton>
+            <span className="min-w-[38px] text-center text-[14px] text-ink">{item.qty}</span>
+            <StepperButton
+              label="Increase quantity"
+              onClick={() => onQtyChange(item, item.qty + 1)}
+              disabled={atStockCap}
+            >
+              <Plus className="h-[15px] w-[15px]" strokeWidth={1.5} aria-hidden />
+            </StepperButton>
           </div>
 
-          <div className="flex items-center gap-[8px]">
-            <button
-              type="button"
-              onClick={() => onRemove(item)}
-              aria-label={`Remove ${item.title}`}
-              className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-gray-200 text-gray-400 transition-colors hover:border-red-200 hover:text-red-600"
-            >
-              <Trash2 className="h-[12px] w-[12px]" aria-hidden />
-            </button>
-            <div className="flex h-[26px] items-center overflow-hidden rounded-[6px] bg-accent">
-              <button
-                type="button"
-                onClick={() => onQtyChange(item, item.qty - 1)}
-                aria-label="Decrease quantity"
-                className="flex h-full w-[24px] items-center justify-center text-white transition-colors hover:bg-accent-dark"
-              >
-                <Minus className="h-[10px] w-[10px]" strokeWidth={3} aria-hidden />
-              </button>
-              <span className="min-w-[16px] text-center text-[11px] font-bold text-white">{item.qty}</span>
-              <button
-                type="button"
-                onClick={() => onQtyChange(item, item.qty + 1)}
-                disabled={item.stock !== undefined && item.qty >= item.stock}
-                aria-label="Increase quantity"
-                className="flex h-full w-[24px] items-center justify-center text-white transition-colors hover:bg-accent-dark disabled:opacity-50"
-              >
-                <Plus className="h-[10px] w-[10px]" strokeWidth={3} aria-hidden />
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => onRemove(item)}
+            aria-label={`Remove ${item.title}`}
+            className="shrink-0 p-[4px] text-ink transition-colors hover:text-accent"
+          >
+            <X className="h-[22px] w-[22px]" strokeWidth={2} aria-hidden />
+          </button>
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * Variant summary for the row, colour first ("Kentucky Blue / S") — the
+ * fashion-retail convention, and the order the reference uses. Any other
+ * axes a product defines (Fit, Length, …) follow in their own order, so
+ * this doesn't silently drop options it wasn't written for.
+ */
+function formatOptionLine(options: Record<string, string> | undefined): string | null {
+  if (!options) return null;
+  const keys = Object.keys(options);
+  if (keys.length === 0) return null;
+
+  const lead = ["color", "colour", "size"];
+  const rank = (k: string) => {
+    const i = lead.indexOf(k.toLowerCase());
+    return i === -1 ? lead.length : i;
+  };
+  return keys
+    .slice()
+    .sort((a, b) => rank(a) - rank(b))
+    .map((k) => options[k])
+    .join(" / ");
+}
+
+function StepperButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={cn(
+        "flex h-full w-[42px] items-center justify-center text-ink transition-colors",
+        "hover:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 disabled:hover:bg-transparent",
+      )}
+    >
+      {children}
+    </button>
   );
 }

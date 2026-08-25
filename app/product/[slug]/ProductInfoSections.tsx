@@ -2,7 +2,6 @@ import * as React from "react";
 import Link from "next/link";
 import { Plus, RotateCcw, Shield, Truck } from "lucide-react";
 import { FaqJsonLd } from "@/components/seo";
-import { Markdown } from "@/components/composed";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { ProductDetail } from "@/types/catalog";
@@ -80,7 +79,6 @@ export function ProductInfoSections({ product, settings, className }: ProductInf
   const sku = product.variants.find((v) => v.sku)?.sku;
   const inStock = product.stock > 0;
   const attributes = product.attributes ?? {};
-  const summary = product.description ?? product.shortDescription;
 
   const shipping = settings?.shippingDetails?.trim();
   const returns = settings?.returnPolicy?.trim();
@@ -98,17 +96,8 @@ export function ProductInfoSections({ product, settings, className }: ProductInf
       aria-label="Product information"
     >
 
-      {/* ── Description ──────────────────────────────────────────────── */}
-      {summary ? (
-        <AccordionRow title="Description" defaultOpen>
-          <Markdown
-            content={summary}
-            className="text-[14px] leading-relaxed text-neutral-600"
-          />
-        </AccordionRow>
-      ) : null}
-
       {/* ── Specifications ────────────────────────────────────────────── */}
+      {/* Description renders in the buy column (Yellow-style accordion) — not duplicated here. */}
       <AccordionRow title="Specifications">
         <dl>
           {brandName ? <Spec term="Brand">{brandName}</Spec> : null}

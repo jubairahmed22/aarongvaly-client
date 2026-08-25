@@ -4,16 +4,18 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ShoppingBag, Heart, Menu, Search } from "lucide-react";
+import { ShoppingBag, Heart, Search } from "lucide-react";
 import { type CategoryNode, type BrandLite } from "./CategoryMenu";
 import { DepartmentStrip } from "./DepartmentStrip";
 import { SearchOverlay } from "./SearchOverlay";
 import { MobileMenu } from "./MobileMenu";
 import { UserMenu } from "./UserMenu";
 import { CartDrawer } from "../CartDrawer";
+import { MobileHeaderBar } from "../MobileHeaderBar";
 import { useCartStore } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore";
 import { useUIStore } from "@/store/uiStore";
+import { useHydrated } from "@/hooks/useHydrated";
 import { COMPANY } from "@/lib/entity/company";
 import { cn } from "@/lib/utils/cn";
 
@@ -42,9 +44,12 @@ export interface NavbarProps {
 const FEATURE_LINK = { label: "The Fall Edit ’26", href: "/offers" };
 
 export function Navbar({ categories: ssrCategories, hideMobileHeader }: NavbarProps) {
-  const cartCount = useCartStore((s) => s.count());
-  const wishlistCount = useWishlistStore((s) => s.count());
-  const setMobileMenuOpen = useUIStore((s) => s.setMobileMenuOpen);
+  const hydrated = useHydrated();
+  // Persisted-store reads must not reach the markup until after hydration -
+  // see useHydrated. Zeroing them pre-hydration keeps server and first
+  // client render identical.
+  const cartCount = useCartStore((s) => (hydrated ? s.count() : 0));
+  const wishlistCount = useWishlistStore((s) => (hydrated ? s.count() : 0));
   const setCartDrawerOpen = useUIStore((s) => s.setCartDrawerOpen);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const searchOpen = useUIStore((s) => s.searchOpen);
@@ -63,61 +68,8 @@ export function Navbar({ categories: ssrCategories, hideMobileHeader }: NavbarPr
 
   return (
     <header id="site-navbar" className="sticky top-0 z-50">
-      {/* ─────────────── Mobile & tablet header (below lg) ─────────────── */}
-      <div className={cn("border-b border-neutral-200 bg-paper lg:hidden", hideMobileHeader && "hidden")}>
-        <div className="flex items-center gap-[4px] px-[12px] py-[10px]">
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open menu"
-            className="-ml-[8px] inline-flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-neutral-100"
-          >
-            <Menu className="h-[22px] w-[22px]" aria-hidden />
-          </button>
-
-          <div className="min-w-0 flex-1 pl-[4px]">
-            <Link href="/" aria-label={`${COMPANY.name} home`} className="inline-flex items-center py-[6px]">
-              <Image
-                src="/logo-wordmark.png"
-                alt={COMPANY.name}
-                width={148}
-                height={28}
-                className="h-[24px] w-auto"
-                priority
-              />
-            </Link>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSearchOpen(true)}
-            aria-label="Search"
-            aria-expanded={searchOpen}
-            className="inline-flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-neutral-100"
-          >
-            <Search className="h-[21px] w-[21px]" strokeWidth={2.4} aria-hidden />
-          </button>
-
-          <Link
-            href="/wishlist"
-            aria-label="My Wish List"
-            className="relative inline-flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-neutral-100"
-          >
-            <Heart className="h-[21px] w-[21px]" aria-hidden />
-            <CountBadge count={wishlistCount} />
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => setCartDrawerOpen(true)}
-            aria-label="Shopping Cart"
-            className="relative inline-flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-neutral-100"
-          >
-            <ShoppingBag className="h-[21px] w-[21px]" aria-hidden />
-            <CountBadge count={cartCount} />
-          </button>
-        </div>
-      </div>
+      {/* Mobile & tablet header (below lg) - shared with the home page. */}
+      <MobileHeaderBar className={cn(hideMobileHeader && "hidden")} />
 
       {/* ─────────────── Desktop header (lg+) ───────────────
           Row 1 is a two-column split: wordmark hard left, and a right column
@@ -200,23 +152,9 @@ export function Navbar({ categories: ssrCategories, hideMobileHeader }: NavbarPr
  * pass would hydration-mismatch.
  */
 function InlineCount({ count }: { count: number }) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
   return (
     <span className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-accent/15 px-[6px] text-[12px] font-semibold leading-none text-ink">
-      {mounted ? count : 0}
-    </span>
-  );
-}
-
-/** Corner badge for the icon-only mobile header buttons. */
-function CountBadge({ count }: { count: number }) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-  if (!mounted || count <= 0) return null;
-  return (
-    <span className="absolute -right-[2px] -top-[2px] flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-accent px-[4px] text-[9px] font-bold leading-none text-paper ring-2 ring-paper">
-      {count > 99 ? "99+" : count}
+      {count}
     </span>
   );
 }

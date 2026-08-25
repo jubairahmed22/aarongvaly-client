@@ -157,11 +157,20 @@ export function OffersAdminClient() {
         </div>
       </header>
 
-      {/* Ordered to match the storefront: the banner sits above the category
-          strip on the homepage, so it does here too. */}
-      <HomeBannerSection />
+      {/* Ordered to match the storefront exactly: banner, categories, banner. */}
+      <HomeBannerSection
+        field="homeBanner"
+        title="Homepage banner"
+        placement="directly under the navbar"
+      />
 
       <HomeCategoryShowcaseSection />
+
+      <HomeBannerSection
+        field="homeBannerSecondary"
+        title="Second homepage banner"
+        placement="below the category grid"
+      />
 
       {/* Filter bar - Flowbite table toolbar */}
       <div className="flex flex-col gap-[12px] rounded-[8px] border border-gray-200 bg-white p-[16px] shadow-sm lg:flex-row lg:items-center">

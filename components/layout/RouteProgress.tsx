@@ -185,13 +185,10 @@ export function RouteProgress() {
       style={{ opacity: visible ? 1 : 0, transition: "opacity 200ms ease-out" }}
     >
       <div
-        className="h-full bg-accent"
+        className="h-full bg-ink"
         style={{
           width: `${value}%`,
           transition: "width 180ms ease-out",
-          // Glowing leading edge, the detail that makes YouTube's bar read as
-          // motion rather than a plain growing block.
-          boxShadow: "0 0 8px rgba(253,125,2,0.85), 0 0 3px rgba(253,125,2,1)",
         }}
       />
     </div>

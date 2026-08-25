@@ -252,6 +252,8 @@ export interface ProductListQuery {
   inStock?: boolean;
   isFeatured?: boolean;
   tags?: string;
+  /** Comma-separated size run (e.g. "M,L,XL") — matches any variant's Size. */
+  size?: string;
   sort?: ProductSort;
   page?: number;
   limit?: number;

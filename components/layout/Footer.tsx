@@ -2,171 +2,125 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
 import { Facebook, Instagram, Youtube } from "lucide-react";
 import { COMPANY } from "@/lib/entity/company";
-import { catalogApi } from "@/lib/api/catalog";
-import { catalogKeys } from "@/hooks/useCatalog";
+import { usePublicSiteSettings } from "@/hooks/useSiteSettings";
+import { cn } from "@/lib/utils/cn";
 
 /**
- * Real district/division towns of Bangladesh (all 64 districts) - not a
- * fabricated placeholder list. Mirrors the storefront's own "Fast Delivery
- * Nationwide" messaging and the insideDhaka/outsideDhaka delivery pricing
- * tiers already in SiteSettings - both already imply nationwide coverage, so
- * this footer block is consistent with what the site already claims
- * elsewhere, not a new promise.
+ * Global storefront footer — three centred link columns, a social cluster on
+ * the right, then a baseline row carrying the copyright and the accepted
+ * payment methods.
+ *
+ * Every href here resolves to a route that exists. The reference design this
+ * follows lists "About", "Store Locator", "Blogs and News", "Privacy Policy",
+ * "Safety Advisory" and "Community Guidelines"; none of those pages exist in
+ * this app, and the previous footer already shipped a dead /privacy link, so
+ * the columns are filled with the closest real destinations instead. Add the
+ * routes and these lists can grow to match one-for-one.
  */
-const CITIES = [
-  "Bagerhat", "Bandarban", "Barguna", "Barishal", "Bhola", "Bogura",
-  "Brahmanbaria", "Chandpur", "Chapainawabganj", "Chattogram", "Chuadanga",
-  "Cox's Bazar", "Cumilla", "Dhaka", "Dinajpur", "Faridpur", "Feni",
-  "Gaibandha", "Gazipur", "Gopalganj", "Habiganj", "Jamalpur", "Jashore",
-  "Jhalokati", "Jhenaidah", "Joypurhat", "Khagrachari", "Khulna",
-  "Kishoreganj", "Kurigram", "Kushtia", "Lakshmipur", "Lalmonirhat",
-  "Madaripur", "Magura", "Manikganj", "Meherpur", "Moulvibazar",
-  "Munshiganj", "Mymensingh", "Naogaon", "Narail", "Narayanganj",
-  "Narsingdi", "Natore", "Netrokona", "Nilphamari", "Noakhali",
-  "Pabna", "Panchagarh", "Patuakhali", "Pirojpur", "Rajbari", "Rajshahi",
-  "Rangamati", "Rangpur", "Satkhira", "Shariatpur", "Sherpur", "Sirajganj",
-  "Sunamganj", "Sylhet", "Tangail", "Thakurgaon",
-];
 
-const COLUMNS = [
+interface FooterLink {
+  label: string;
+  href: string;
+}
+
+const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
   {
-    title: "Shop",
+    title: "Information",
     links: [
       { label: "New Arrivals", href: "/all-products?sort=newest" },
       { label: "All Products", href: "/all-products" },
-      { label: "Sale", href: "/offers" },
       { label: "Brands", href: "/brands" },
+      { label: "Contact Us", href: "/contact" },
     ],
   },
   {
-    title: "Account",
+    title: "Policies",
     links: [
-      { label: "Sign In", href: "/login" },
-      { label: "Join Now", href: "/register" },
-      { label: "My Orders", href: "/account/orders" },
-      { label: "Wishlist", href: "/wishlist" },
-    ],
-  },
-  {
-    title: "Help",
-    links: [
-      { label: "Contact", href: "/contact" },
+      { label: "Delivery Policy", href: "/shipping" },
+      { label: "Return & Exchange", href: "/returns" },
+      { label: "Terms & Conditions", href: "/terms" },
       { label: "FAQ", href: "/faq" },
-      { label: "Shipping", href: "/shipping" },
-      { label: "Returns", href: "/returns" },
     ],
   },
-] as const;
+];
 
 /**
- * Global storefront footer. Categories are fetched client-side (same
- * `useCategories` react-query hook the Navbar uses) rather than server-side,
- * since Footer is imported directly into both Server and Client page
- * components across the app - an async Server Component can't be rendered
- * from inside a "use client" file, but a plain client-fetch works uniformly
- * everywhere.
+ * Human labels for the payment method keys stored in
+ * `siteSettings.enabledPaymentMethods`. Unknown keys fall back to a
+ * title-cased version of the key itself, so a method added server-side
+ * still renders something sensible instead of disappearing.
  */
+const PAYMENT_LABELS: Record<string, string> = {
+  cod: "Cash on Delivery",
+  bkash: "bKash",
+  nagad: "Nagad",
+  rocket: "Rocket",
+  sslcommerz: "SSLCOMMERZ",
+  stripe: "Stripe",
+  paypal: "PayPal",
+  card: "Card",
+  bank_transfer: "Bank Transfer",
+};
+
+function paymentLabel(key: string): string {
+  return (
+    PAYMENT_LABELS[key] ??
+    key.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
 export function Footer() {
-  const { data: categories } = useQuery({
-    queryKey: catalogKeys.categories({ shape: "tree", isActive: true }),
-    queryFn: () => catalogApi.listCategories({ shape: "tree", isActive: true }),
-    staleTime: 5 * 60_000,
-  });
-  const topCategories = categories ?? [];
+  const { data: settings } = usePublicSiteSettings();
+  const contact = settings?.contact;
+
+  const companyName = settings?.companyName?.trim() || COMPANY.name;
+  const phone = contact?.phone?.trim();
+  const email = contact?.email?.trim() || COMPANY.email;
+  const paymentMethods = settings?.enabledPaymentMethods ?? [];
+
+  // Only render a social circle when there's a real URL behind it — an icon
+  // that links nowhere is worse than a missing icon.
+  const socials = [
+    { href: contact?.facebook?.trim(), label: "Facebook", Icon: Facebook },
+    { href: contact?.instagram?.trim(), label: "Instagram", Icon: Instagram },
+    { href: contact?.youtube?.trim(), label: "YouTube", Icon: Youtube },
+  ].filter((s): s is { href: string; label: string; Icon: typeof Facebook } => !!s.href);
+
+  // Fall back to the hard-coded company profile when Site Settings has no
+  // social URLs configured yet.
+  const resolvedSocials =
+    socials.length > 0
+      ? socials
+      : COMPANY.sameAs.map((href) => ({
+          href,
+          label: href.includes("instagram")
+            ? "Instagram"
+            : href.includes("youtube")
+              ? "YouTube"
+              : "Facebook",
+          Icon: href.includes("instagram")
+            ? Instagram
+            : href.includes("youtube")
+              ? Youtube
+              : Facebook,
+        }));
 
   return (
-    <footer className="mt-8 bg-paper text-ink">
-      {/* Same gutters as the navbar/header at every size: 12px below lg
-          (matches the mobile home header), 82% width on lg+ (matches the
-          desktop navbar rows) - container-screen's 32px mobile padding
-          left the footer visibly narrower than the header. */}
-      <div className="mx-auto w-full px-[12px] py-8 md:py-12 lg:w-[82%] lg:max-w-none lg:px-0">
-        {/* ── Shop by category — real category tree, Zepto-style grid ── */}
-        {topCategories.length > 0 ? (
-          <div>
-            <h2 className="text-[15px] font-bold text-ink">Categories</h2>
-            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 md:grid-cols-5">
-              {topCategories.map((c) => (
-                <Link
-                  key={c._id}
-                  href={`/category/${c.path}`}
-                  className="text-[14px] font-semibold text-ink transition-colors hover:text-accent"
-                >
-                  {c.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* ── Cities — real Bangladesh districts, plain SEO text (no per-city pages exist) ── */}
-        <div className={topCategories.length > 0 ? "mt-8 md:mt-10" : undefined}>
-          <h2 className="text-[15px] font-bold text-ink">Cities</h2>
-          <p className="mt-3 text-[13px] leading-relaxed text-neutral-500">
-            {CITIES.join(" | ")}
-          </p>
-        </div>
-
-        <div className="my-8 h-px w-full bg-neutral-200 md:my-10" />
-
-        {/* ── Brand + nav columns ── */}
-        <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-5 md:grid-cols-5 md:gap-x-6">
-          <div className="col-span-2 flex flex-col gap-3 md:col-span-2">
-            <Link
-              href="/"
-              aria-label={`${COMPANY.name} home`}
-              className="inline-flex w-fit transition-opacity hover:opacity-80"
-            >
-              <Image
-                src="/logo-wordmark.png"
-                alt={COMPANY.name}
-                width={190}
-                height={36}
-                className="h-9 w-auto sm:h-10"
-              />
-            </Link>
-            <p className="max-w-[320px] text-sm leading-relaxed text-neutral-500">
-              Everything you need, all in one place — genuine products, fast delivery.
-            </p>
-            <div className="mt-2 flex items-center gap-3">
-              {COMPANY.sameAs.map((href) => {
-                const Icon = href.includes("instagram")
-                  ? Instagram
-                  : href.includes("youtube")
-                    ? Youtube
-                    : Facebook;
-                const label = href.includes("instagram") ? "Instagram" : href.includes("youtube") ? "YouTube" : "Facebook";
-                return (
-                  <a
-                    key={href}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={label}
-                    className="flex h-[32px] w-[32px] items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-accent hover:text-accent"
-                  >
-                    <Icon className="h-[15px] w-[15px]" aria-hidden />
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-
+    <footer className="mt-[48px] border-t border-neutral-300 bg-paper text-ink">
+      <div className="mx-auto w-full px-[16px] pb-[28px] pt-[40px] lg:w-[92%] lg:px-0 xl:w-[86%]">
+        {/* ── Link columns + socials ── */}
+        <div className="grid gap-y-[36px] sm:grid-cols-2 lg:grid-cols-4">
           {COLUMNS.map((col) => (
-            <nav key={col.title} aria-label={col.title} className="flex flex-col gap-2">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-neutral-400">
-                {col.title}
-              </h3>
-              <ul className="flex flex-col gap-1.5">
+            <nav key={col.title} aria-label={col.title} className="text-center">
+              <FooterHeading>{col.title}</FooterHeading>
+              <ul className="mt-[20px] space-y-[14px]">
                 {col.links.map((link) => (
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className="text-sm text-neutral-500 transition-colors hover:text-accent"
+                      className="text-[15px] text-ink transition-colors hover:text-accent"
                     >
                       {link.label}
                     </Link>
@@ -175,25 +129,85 @@ export function Footer() {
               </ul>
             </nav>
           ))}
+
+          {/* Customer service — contact details rather than navigation. */}
+          <section aria-label="Customer service" className="text-center">
+            <FooterHeading>Customer Service</FooterHeading>
+            <ul className="mt-[20px] space-y-[14px] text-[15px] text-ink">
+              {phone ? (
+                <li>
+                  <a href={`tel:${phone.replace(/\s+/g, "")}`} className="transition-colors hover:text-accent">
+                    {phone}
+                  </a>
+                </li>
+              ) : null}
+              <li className="uppercase">{COMPANY.supportHours}</li>
+              {email ? (
+                <li>
+                  <a href={`mailto:${email}`} className="break-all transition-colors hover:text-accent">
+                    {email}
+                  </a>
+                </li>
+              ) : null}
+            </ul>
+          </section>
+
+          {/* Socials sit in the fourth column on wide screens, centred with
+              the link columns below that. */}
+          {resolvedSocials.length > 0 ? (
+            <div className="flex items-start justify-center gap-[12px] sm:col-span-2 lg:col-span-1 lg:justify-end">
+              {resolvedSocials.map(({ href, label, Icon }) => (
+                <a
+                  key={href}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className={cn(
+                    "flex h-[38px] w-[38px] items-center justify-center rounded-full border border-neutral-400 text-ink",
+                    "transition-colors hover:border-ink hover:bg-ink hover:text-paper",
+                  )}
+                >
+                  <Icon className="h-[16px] w-[16px]" aria-hidden />
+                </a>
+              ))}
+            </div>
+          ) : null}
         </div>
 
-        <div className="mt-8 flex flex-col items-start justify-between gap-2 border-t border-neutral-200 pt-5 text-xs text-neutral-500 md:mt-10 md:flex-row md:items-center">
-          <p>© {new Date().getFullYear()} {COMPANY.name}. All rights reserved.</p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 md:gap-x-4 md:gap-y-2">
-            <Link href="/privacy" className="transition-colors hover:text-ink">Privacy Policy</Link>
-            <Link href="/terms" className="transition-colors hover:text-ink">Terms</Link>
-            <span className="hidden h-3 w-px bg-neutral-300 md:inline-block" aria-hidden />
-            <a
-              href="https://www.enveria.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-ink"
-            >
-              Powered by <span className="font-semibold text-neutral-600">enveria.io</span>
-            </a>
-          </div>
+        {/* ── Baseline: copyright + accepted payments ── */}
+        <div className="mt-[40px] flex flex-col items-center gap-[24px] lg:flex-row lg:items-end lg:justify-between">
+          <p className="order-2 text-[14px] text-ink lg:order-1">
+            © {new Date().getFullYear()} {companyName} | All Rights Reserved.
+          </p>
+
+          {paymentMethods.length > 0 ? (
+            <div className="order-1 flex items-center gap-[12px] lg:order-2">
+              <span className="shrink-0 text-[11px] text-neutral-500">Pay With</span>
+              {/* The reference shows a grid of payment-brand logos. No logo
+                  assets ship with this repo, so the enabled methods render as
+                  labelled chips — same block, real data, nothing invented.
+                  Drop logo files into /public and these can become images. */}
+              <ul className="flex max-w-[420px] flex-wrap justify-center gap-[6px] border border-neutral-200 p-[8px]">
+                {paymentMethods.map((method) => (
+                  <li
+                    key={method}
+                    className="border border-neutral-200 bg-neutral-50 px-[8px] py-[4px] text-[10px] font-medium uppercase tracking-[0.06em] text-neutral-600"
+                  >
+                    {paymentLabel(method)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-[15px] font-bold uppercase tracking-[0.04em] text-ink">{children}</h2>
   );
 }

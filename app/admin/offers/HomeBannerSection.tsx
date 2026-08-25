@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * Homepage banner editor - manages the single full-width carousel that sits
- * directly under the navbar (see components/composed/HomeBanner.tsx). Lives at
- * the top of /admin/offers, right after HomeCategoryShowcaseSection.
+ * Homepage banner editor - manages one full-bleed carousel (see
+ * components/composed/HomeBanner.tsx).
  *
- * Replaced the older two-column editor for the side-by-side promo pair; the
- * homepage now shows one banner, so this is one ordered list.
+ * The homepage runs two of these, above and below the category grid, and they
+ * are identical apart from which SiteSettings field they write to. So this is
+ * one component mounted twice via the `field` prop rather than two near-copies
+ * that would drift apart on the next change. Each instance keeps its own draft
+ * state and saves only its own field, so editing one never clobbers the other.
  *
  * Each slide is just an uploaded image + a link - no title/subtitle/CTA text
  * fields, since the whole banner is the click target and any copy lives inside
@@ -38,8 +40,8 @@ import { cn } from "@/lib/utils/cn";
 
 const MAX_SLIDES = 8;
 
-/** Desktop renders the banner at 3:1 inside the 82% column; this is that box at 2x. */
-const RECOMMENDED_SIZE = "1920 × 640px";
+/** The banner is full-bleed 16:9 at every width, so artwork is never cropped. */
+const RECOMMENDED_SIZE = "2000 × 1125px";
 
 interface SlideDraft {
   /** Stable React key - server `_id` once persisted, a local generated id for new/unsaved slides. */
@@ -71,7 +73,17 @@ function seed(items: SiteSettingsHomeBannerSlide[] | undefined): SlideDraft[] {
     }));
 }
 
-export function HomeBannerSection() {
+/** Which SiteSettings list this instance edits. */
+export type HomeBannerField = "homeBanner" | "homeBannerSecondary";
+
+export interface HomeBannerSectionProps {
+  field: HomeBannerField;
+  title: string;
+  /** Where on the homepage this carousel appears, for the section blurb. */
+  placement: string;
+}
+
+export function HomeBannerSection({ field, title, placement }: HomeBannerSectionProps) {
   const { data: settings, isLoading, isError, error, refetch } = useAdminSiteSettings();
   const update = useUpdateSiteSettings();
   const toast = useUIStore((s) => s.toast);
@@ -84,9 +96,9 @@ export function HomeBannerSection() {
 
   React.useEffect(() => {
     if (hydrated || !settings) return;
-    setSlides(seed(settings.homeBanner));
+    setSlides(seed(settings[field]));
     setHydrated(true);
-  }, [hydrated, settings]);
+  }, [hydrated, settings, field]);
 
   function mutate(next: SlideDraft[]) {
     setSlides(next);
@@ -144,7 +156,7 @@ export function HomeBannerSection() {
     }
     update.mutate(
       {
-        homeBanner: slides.map((s) => ({
+        [field]: slides.map((s) => ({
           _id: s._id,
           image: s.image,
           imagePublicId: s.imagePublicId || undefined,
@@ -156,7 +168,7 @@ export function HomeBannerSection() {
         onSuccess: () => {
           setDirty(false);
           setAttemptedSave(false);
-          toast({ title: "Homepage banner saved", tone: "success" });
+          toast({ title: `${title} saved`, tone: "success" });
         },
         onError: (err) =>
           toast({
@@ -173,7 +185,7 @@ export function HomeBannerSection() {
       <section className="flex flex-col items-center gap-[12px] rounded-[8px] border border-gray-200 bg-white py-[32px] text-center shadow-sm">
         <AlertTriangle className="h-[20px] w-[20px] text-gray-400" aria-hidden />
         <p className="text-[14px] text-gray-500">
-          {error instanceof AdminError ? error.message : "Couldn't load the homepage banner."}
+          {error instanceof AdminError ? error.message : `Couldn't load the ${title.toLowerCase()}.`}
         </p>
         <Button variant="secondary" size="sm" onClick={() => refetch()}>
           Try again
@@ -190,12 +202,13 @@ export function HomeBannerSection() {
             <ImagePlay className="h-[16px] w-[16px]" aria-hidden />
           </span>
           <div>
-            <h2 className="text-[18px] font-semibold text-gray-900">Homepage banner</h2>
+            <h2 className="text-[18px] font-semibold text-gray-900">{title}</h2>
             <p className="mt-[2px] max-w-[60ch] text-[14px] text-gray-500">
-              The full-width banner shown directly under the navbar. Add up to {MAX_SLIDES} slides and it
+              The full-bleed banner shown {placement}. Add up to {MAX_SLIDES} slides and it
               rotates automatically; add one and it sits there as a static banner. Upload the artwork at{" "}
-              <strong className="font-medium text-gray-700">{RECOMMENDED_SIZE}</strong> and set where it links
-              to - the whole banner is clickable, so no separate button is drawn.
+              <strong className="font-medium text-gray-700">{RECOMMENDED_SIZE}</strong> (16:9) and set where
+              it links to - the whole banner is clickable, so no separate button is drawn. Anything at 16:9
+              is shown in full at every screen size, so copy baked into the artwork never gets cropped.
             </p>
           </div>
         </div>
@@ -234,7 +247,7 @@ export function HomeBannerSection() {
 
             {slides.length === 0 ? (
               <p className="rounded-[8px] border border-dashed border-gray-300 bg-white py-[20px] text-center text-[13px] text-gray-500">
-                No banner yet. Add one to show it under the navbar.
+                No banner yet. Add one to show it {placement}.
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-[8px] md:grid-cols-2 xl:grid-cols-3">

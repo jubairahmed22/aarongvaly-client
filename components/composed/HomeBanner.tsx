@@ -135,12 +135,18 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
       aria-label="Featured banners"
       aria-roledescription="carousel"
     >
-      {/* Full-bleed below lg (no gutters, no rounding); contained to the site's
-          82% column on desktop, matching every other homepage section. */}
-      <div className="mx-auto w-full py-0 lg:w-[82%] lg:py-6">
+      {/* Full-bleed at every breakpoint - edge to edge, square corners, flush
+          against the nav above it. This is the storefront's cover image, so it
+          gets no gutters and no rounding at all.
+
+          16:9 at every width, deliberately: campaign artwork is cut from 16:9
+          video and carries baked-in copy (season title, caption, logo) near
+          its edges, so any breakpoint-specific crop slices the wording off.
+          Holding one ratio shows every upload exactly as it was designed. */}
+      <div className="w-full">
         <div
           ref={rootRef}
-          className="group/banner relative aspect-[2/1] w-full overflow-hidden bg-neutral-100 lg:aspect-[3/1] lg:rounded-2xl"
+          className="group/banner relative aspect-[16/9] w-full overflow-hidden bg-neutral-100"
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           onFocusCapture={() => setHovered(true)}
@@ -175,7 +181,7 @@ export function HomeBanner({ slides, autoplayMs = 5000, eager = true, className 
               <ArrowButton side="left" onClick={() => go(index - 1)} />
               <ArrowButton side="right" onClick={() => go(index + 1)} />
 
-              <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-1.5 lg:bottom-4">
+              <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-1.5 lg:bottom-6">
                 {slides.map((slide, i) => (
                   <button
                     key={slide.key}
@@ -211,14 +217,14 @@ function ArrowButton({ side, onClick }: { side: "left" | "right"; onClick: () =>
       type="button"
       onClick={onClick}
       aria-label={side === "left" ? "Previous banner" : "Next banner"}
-      // Pointer-only: touch users swipe, and on a phone the arrows would sit on
-      // top of the artwork. Fades in with the container on hover.
+      // Pointer-only: touch users swipe, and on a phone the arrows would cover
+      // the artwork. Always visible rather than hover-revealed, so it reads as
+      // a carousel before anyone moves the mouse.
       className={cn(
-        "absolute top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full",
-        "h-9 w-9 bg-white/85 text-ink shadow-md backdrop-blur-sm",
-        "opacity-0 transition-opacity duration-200 hover:bg-white focus-visible:opacity-100",
-        "group-hover/banner:opacity-100 lg:flex",
-        side === "left" ? "left-3" : "right-3",
+        "absolute top-1/2 hidden -translate-y-1/2 items-center justify-center rounded-full lg:flex",
+        "h-10 w-10 border border-black/5 bg-white/80 text-ink shadow-sm backdrop-blur-sm",
+        "transition-colors duration-200 hover:bg-white",
+        side === "left" ? "left-4" : "right-4",
       )}
     >
       <Icon className="h-5 w-5" aria-hidden />

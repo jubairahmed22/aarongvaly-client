@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Homepage category-showcase editor - manages the Zepto-style "shop by
- * category" tile strip that renders right under the navbar, above the
- * hero/offer banner (see components/composed/HomeCategoryShowcase.tsx).
- * Lives at the top of /admin/offers, in the slot that used to hold the hero
- * banner editor.
+ * Homepage category-showcase editor - manages the "Top categories" grid that
+ * renders under the homepage banner (see
+ * components/composed/HomeCategoryShowcase.tsx). Since the homepage lists no
+ * products, this grid is the whole of it below the banner, which makes the
+ * order here the storefront's primary navigation.
  *
  * Each tile is just a category pick - top-level, sub-category, or child
  * category all work identically, since the storefront just follows the
@@ -194,9 +194,10 @@ export function HomeCategoryShowcaseSection() {
           <div>
             <h2 className="text-[18px] font-semibold text-gray-900">Homepage category showcase</h2>
             <p className="mt-[2px] text-[14px] text-gray-500">
-              The "shop by category" tile row shown right under the navbar on the homepage. Pick any category,
-              sub-category, or child category - its own image and name are used automatically. Drag the handle to
-              reorder.
+              The "Top categories" grid on the homepage - four across on desktop, two on mobile. Since the
+              homepage shows no products, this grid is how visitors start browsing. Pick any category,
+              sub-category or child category; its own image and name are used automatically. Tiles are tall
+              portraits (4:5), so category images shot upright look best. Drag the handle to reorder.
             </p>
           </div>
         </div>
@@ -214,12 +215,12 @@ export function HomeCategoryShowcaseSection() {
         <div className="h-[160px] animate-pulse rounded-[8px] bg-gray-100" />
       ) : (
         <>
-          {/* Live preview - mirrors the storefront strip exactly */}
+          {/* Live preview - mirrors the storefront grid exactly */}
           {previewItems.length > 0 ? (
             <div className="flex flex-col gap-[6px]">
               <span className="text-[12px] font-medium uppercase tracking-wide text-gray-400">Live preview</span>
               <div className="overflow-hidden rounded-[8px] border border-gray-200">
-                <HomeCategoryShowcase items={previewItems} className="border-b-0" />
+                <HomeCategoryShowcase items={previewItems} className="py-[20px]" />
               </div>
             </div>
           ) : null}
@@ -252,7 +253,7 @@ export function HomeCategoryShowcaseSection() {
 
           {tiles.length === 0 ? (
             <p className="rounded-[8px] border border-dashed border-gray-300 bg-gray-50 py-[24px] text-center text-[14px] text-gray-500">
-              No tiles yet. Add one below to start building the homepage category strip.
+              No tiles yet. Add one below to start building the homepage category grid.
             </p>
           ) : null}
 

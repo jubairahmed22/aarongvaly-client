@@ -1,6 +1,5 @@
-import { ProductRow } from "@/components/composed";
 import type { ProductSummary } from "@/types/catalog";
-import { cn } from "@/lib/utils/cn";
+import { ProductRail } from "./ProductRail";
 
 export interface RelatedProductsProps {
   products: ProductSummary[];
@@ -10,12 +9,17 @@ export interface RelatedProductsProps {
 export function RelatedProducts({ products, className }: RelatedProductsProps) {
   if (products.length === 0) return null;
   return (
-    <ProductRow
-      title="You might also like"
-      products={products}
-      viewAllHref="/all-products"
-      plain
-      className={cn(className)}
+    <ProductRail
+      title="Related Products"
+      items={products.map((p) => ({
+        slug: p.slug,
+        title: p.title,
+        image: p.images[0]?.url ?? "",
+        price: p.price,
+        compareAtPrice: p.compareAtPrice,
+        currency: p.currency,
+      }))}
+      className={className}
     />
   );
 }

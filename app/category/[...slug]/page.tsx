@@ -143,11 +143,11 @@ export default async function CategoryPage({ params }: PageProps) {
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Navbar />
-      {/* Grocery-app layout: a persistent category rail beside the product
-          grid. `container-screen` is the exact class the Navbar itself uses,
-          so the rail + grid line up with the nav above pixel-for-pixel
-          instead of a hand-rolled approximation drifting out of sync. */}
-      <main className="container-screen flex flex-1 gap-2 pt-2 sm:gap-4 sm:pb-4">
+      {/* Editorial collection layout: no category rail — the navbar's
+          department strip carries wayfinding — so the grid runs the full
+          content width. The 92%/86% widths match the Navbar's own container
+          so the toolbar lines up with the nav above it. */}
+      <main className="mx-auto w-full flex-1 px-[16px] pb-[64px] pt-[28px] lg:w-[92%] lg:px-0 xl:w-[86%]">
         <CategoryProductsClient
           categoryPath={path}
           categoryName={category.name}

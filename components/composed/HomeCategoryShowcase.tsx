@@ -18,80 +18,94 @@ export interface HomeCategoryShowcaseProps {
 }
 
 /**
- * Zepto-style "shop by category" strip - a horizontally scrollable row of
- * image + title tiles. Lives right under the navbar, above the hero / offer
- * banner (see app/page.tsx). Fully admin-managed at /admin/offers - each
- * tile points at any node in the category tree (top-level, sub-category, or
- * child category all work the same way, since the storefront just follows
- * the category's `path`).
+ * "Top categories" grid - the homepage's editorial category block, a near
+ * full-bleed grid of tall portrait tiles with the category name set over the
+ * bottom of each image. Admin-managed at /admin/offers; each tile points at
+ * any node in the category tree (top-level, sub-category or child all behave
+ * the same, since the storefront just follows the category's `path`).
  *
- * `href` is optional per-tile so this same component doubles as the admin
- * form's live preview (non-interactive - no navigation) without forking the
- * markup between the two call sites.
+ * `href` is optional per tile so this same component doubles as the admin
+ * form's live preview (non-interactive) without forking the markup.
  */
 export function HomeCategoryShowcase({ items, className }: HomeCategoryShowcaseProps) {
   if (items.length === 0) return null;
 
   return (
-    <section
-      className={cn(
-        // Below lg the strip sits on the same lavender as the mobile home
-        // header (Zepto style) and shares its 12px gutters so both line up;
-        // lg+ keeps the original white scroll-row look.
-        "border-b border-neutral-200 bg-[#F5EDFF] lg:bg-paper",
-        className,
-      )}
-      aria-label="Shop by category"
-    >
-      <div className="mx-auto w-full px-[12px] lg:w-[82%] lg:max-w-none lg:px-0">
-        {/* One horizontal scroll row at every size.
-            - below lg: each tile is exactly 1/4 of the row (4 per viewport).
-            - lg+: the row is divided evenly by the tile count, so the tiles
-              always span the full navbar width instead of leaving a gap on
-              the right. `max()` floors the tile at 88px, so an unusually long
-              admin-configured list stops shrinking and scrolls instead. The
-              16px subtracted per gap is Tailwind `gap-2` on this project's
-              8px-per-unit spacing scale - it has to stay in sync with the
-              `lg:gap-2` class below or the row stops adding up. */}
+    <section className={cn("bg-paper py-[28px] lg:py-[44px]", className)} aria-labelledby="top-categories">
+      {/* Only a hairline gutter: the tiles run almost the full width, matching
+          the full-bleed banner above them. */}
+      <div className="w-full px-[12px] lg:px-[20px]">
+        {/* Centred label with a rule running out to each edge. */}
+        <div className="flex items-center gap-[16px] lg:gap-[28px]">
+          <span aria-hidden className="h-px flex-1 bg-neutral-300" />
+          <h2
+            id="top-categories"
+            className="text-center text-[13px] font-medium uppercase tracking-[0.18em] text-ink lg:text-[15px]"
+          >
+            Top Categories
+          </h2>
+          <span aria-hidden className="h-px flex-1 bg-neutral-300" />
+        </div>
+
+        {/* Four across at most, but never more columns than there are tiles -
+            a fixed 4-up grid leaves dead cells at the end of the row when the
+            admin has configured fewer. */}
         <ul
-          className="scrollbar-hide flex items-start gap-[10px] overflow-x-auto scroll-smooth py-[14px] lg:gap-2 lg:py-4"
+          className="mt-[20px] grid gap-[8px] grid-cols-[repeat(var(--cols-sm),minmax(0,1fr))] lg:mt-[28px] lg:grid-cols-[repeat(var(--cols-lg),minmax(0,1fr))]"
           style={
             {
-              "--tile-w": `max(72px, calc((100% - ${(items.length - 1) * 16}px) / ${items.length}))`,
+              "--cols-sm": Math.min(items.length, 2),
+              "--cols-lg": Math.min(items.length, 4),
             } as CSSProperties
           }
         >
           {items.map((item) => {
-            const inner = (
+            // A category with no image yet gets a plain neutral tile with dark
+            // type. Laying white-on-a-scrim over an empty grey box reads as a
+            // broken image, and the label stops being legible.
+            const inner = item.image ? (
               <>
-                <span className="flex aspect-square w-full shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-neutral-100 transition-transform duration-200 group-hover:scale-[1.04]">
-                  {item.image ? (
-                    <Image
-                      src={item.image}
-                      alt={item.title}
-                      width={92}
-                      height={92}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <LayoutGrid className="h-6 w-6 text-neutral-300" aria-hidden />
-                  )}
+                <Image
+                  src={item.image}
+                  alt=""
+                  fill
+                  sizes="(min-width: 1024px) 25vw, 50vw"
+                  className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+                />
+                {/* Category photography is typically shot on a pale backdrop, so
+                    the white caption needs a scrim under it to stay readable. */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 via-black/20 to-transparent"
+                />
+                <span className="absolute inset-x-0 bottom-[14px] px-[10px] text-center text-[13px] font-semibold leading-tight text-white lg:bottom-[18px] lg:text-[15px]">
+                  {item.title}
                 </span>
-                <span className="line-clamp-2 w-full text-center text-[12px] font-semibold leading-tight text-ink lg:text-[13px]">
+              </>
+            ) : (
+              <>
+                <span className="absolute inset-0 flex items-center justify-center bg-neutral-100">
+                  <LayoutGrid className="h-7 w-7 text-neutral-300" aria-hidden />
+                </span>
+                <span className="absolute inset-x-0 bottom-[14px] px-[10px] text-center text-[13px] font-semibold leading-tight text-ink lg:bottom-[18px] lg:text-[15px]">
                   {item.title}
                 </span>
               </>
             );
-            // 3 gaps of 10px sit between 4 visible tiles - subtract them
-            // from the row width so exactly 4 columns fill the viewport.
+
             return (
-              <li key={item.key} className="w-[calc((100%-30px)/4)] shrink-0 lg:w-[var(--tile-w)]">
+              <li key={item.key}>
                 {item.href ? (
-                  <Link href={item.href} className="group flex flex-col items-center gap-[6px] lg:gap-2">
+                  <Link
+                    href={item.href}
+                    className="group relative block aspect-[4/5] overflow-hidden bg-neutral-100"
+                  >
                     {inner}
                   </Link>
                 ) : (
-                  <div className="flex flex-col items-center gap-[6px] lg:gap-2">{inner}</div>
+                  <div className="group relative block aspect-[4/5] overflow-hidden bg-neutral-100">
+                    {inner}
+                  </div>
                 )}
               </li>
             );

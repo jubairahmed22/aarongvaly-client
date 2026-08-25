@@ -169,6 +169,8 @@ export interface SiteSettings {
   heroBanner?: SiteSettingsHeroBanner;
   homeCategoryShowcase?: SiteSettingsHomeCategoryShowcaseItem[];
   homeBanner?: SiteSettingsHomeBannerSlide[];
+  /** Second banner carousel, shown below the category grid. Same shape as `homeBanner`. */
+  homeBannerSecondary?: SiteSettingsHomeBannerSlide[];
   contact: SiteSettingsContact;
   termsAndConditions: string;
   returnPolicy: string;
@@ -212,6 +214,7 @@ export interface UpdateSiteSettingsBody {
   }>;
   /** Full ordered replace - the whole slide list is submitted on every save. */
   homeBanner?: Array<{ _id?: string; image: string; imagePublicId?: string; href?: string; isActive?: boolean }>;
+  homeBannerSecondary?: Array<{ _id?: string; image: string; imagePublicId?: string; href?: string; isActive?: boolean }>;
   contact?: Partial<SiteSettingsContact>;
   termsAndConditions?: string;
   returnPolicy?: string;

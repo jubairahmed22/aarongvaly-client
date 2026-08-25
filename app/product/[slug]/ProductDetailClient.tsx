@@ -8,19 +8,17 @@ import {
   Heart,
   ShoppingCart,
   Share2,
-  Ruler,
   Check,
   Tag,
   X,
-  Info,
+  Plus,
   ChevronRight,
   ChevronLeft,
   Maximize2,
   Play,
   Truck,
-  RotateCcw,
+  HelpCircle,
 } from "lucide-react";
-import { Badge } from "@/components/ui";
 import { Markdown, RatingStars } from "@/components/composed";
 import { useCartStore, type CartAddOn } from "@/store/cartStore";
 import { useWishlistStore } from "@/store/wishlistStore";
@@ -36,29 +34,16 @@ import type { PublicCustomizationConfig } from "@/types/customization";
 import { usePublicCustomizations } from "@/hooks/useCustomizations";
 import { useNavbarHeight } from "@/hooks/useNavbarHeight";
 import type { SiteSettingsDelivery, SiteSettingsContact } from "@/types/siteSettings";
+import { RECENTLY_VIEWED_KEY } from "./RecentlyViewed";
 
 function formatPrice(amount: number, currency: string): string {
-  if (currency === "BDT") return `Tk ${amount.toLocaleString("en-IN")}`;
+  if (currency === "BDT")
+    return `Tk ${amount.toLocaleString("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
 }
-
-/**
- * Case-insensitive lookup into a product's free-form `attributes` map by a
- * list of accepted key spellings - e.g. a seller might have entered "Net
- * Qty", "Net Quantity", or "Weight" for the same fact. Returns the first
- * match, or undefined so callers can skip rendering rather than fabricate
- * a value that isn't actually in the data.
- */
-function findAttr(attrs: Record<string, string> | undefined, aliases: string[]): string | undefined {
-  if (!attrs) return undefined;
-  const lower = new Map(Object.entries(attrs).map(([k, v]) => [k.toLowerCase().trim(), v]));
-  for (const alias of aliases) {
-    const v = lower.get(alias);
-    if (v) return v;
-  }
-  return undefined;
-}
-
 
 // Default size chart - used when a product has no custom chart configured
 const DEFAULT_SIZE_CHART: SizeChart = {
@@ -75,167 +60,83 @@ const DEFAULT_SIZE_CHART: SizeChart = {
   notes: "General size guide - measurements may vary by style. When between sizes, size up.",
 };
 
-// ── Size Chart Drawer ─────────────────────────────────────────────────────────
+// ── Accordion row (Yellow-style "+" that rotates into "×") ───────────────────
 
-function SizeChartDrawer({
-  chart,
-  open,
-  onClose,
+function AccordionRow({
+  title,
+  children,
+  defaultOpen,
 }: {
-  chart: SizeChart;
-  open: boolean;
-  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
-
-  // Close on Escape
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        aria-hidden
-        onClick={onClose}
-        className={cn(
-          "fixed inset-0 z-40 bg-black/40 transition-opacity duration-300",
-          open ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-      />
+    <details className="group border-t border-neutral-200 last:border-b" open={defaultOpen}>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-[16px] py-[18px] [&::-webkit-details-marker]:hidden">
+        <span className="text-[16px] font-medium text-neutral-900">{title}</span>
+        <Plus
+          className="h-[16px] w-[16px] shrink-0 text-neutral-700 transition-transform duration-200 group-open:rotate-45"
+          aria-hidden
+        />
+      </summary>
+      <div className="pb-[20px]">{children}</div>
+    </details>
+  );
+}
 
-      {/* Slide panel - right to left */}
-      <aside
-        role="dialog"
-        aria-modal
-        aria-label="Size guide"
-        className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[460px] flex-col bg-white shadow-2xl",
-          "transition-transform duration-300 ease-out",
-          open ? "translate-x-0" : "translate-x-full",
-        )}
-      >
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-[24px] py-[16px]">
-          <div className="flex items-center gap-[8px]">
-            <Ruler className="h-[16px] w-[16px] text-neutral-500" aria-hidden />
-            <h2 className="text-[16px] font-semibold text-neutral-900">Size guide</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close size guide"
-            className="flex h-[32px] w-[32px] items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
-          >
-            <X className="h-[16px] w-[16px]" aria-hidden />
-          </button>
-        </div>
+// ── Size chart (inline accordion content) ────────────────────────────────────
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <p className="mb-5 text-sm text-neutral-500">
-            All measurements in{" "}
-            <span className="font-medium text-ink">{chart.unit}</span>. For the best fit, measure
-            yourself and compare to the chart.
-          </p>
-
-          {/* Table */}
-          <div className="overflow-x-auto rounded-xl border border-neutral-200">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 bg-neutral-50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    Size
-                  </th>
-                  {chart.columns.map((col) => (
-                    <th
-                      key={col}
-                      className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {chart.rows.map((row, i) => (
-                  <tr
-                    key={row.size}
-                    className={cn(
-                      "border-b border-neutral-100 last:border-0 transition-colors",
-                      i % 2 === 0 ? "bg-white" : "bg-neutral-50/60",
-                    )}
-                  >
-                    <td className="px-4 py-3 font-semibold text-ink">{row.size}</td>
-                    {row.values.map((val, j) => (
-                      <td key={j} className="px-4 py-3 text-neutral-700">
-                        {val}
-                      </td>
-                    ))}
-                  </tr>
+function SizeChartTable({ chart }: { chart: SizeChart }) {
+  return (
+    <div>
+      <p className="mb-[12px] text-[13px] text-neutral-500">
+        All measurements in <span className="font-medium text-neutral-900">{chart.unit}</span>.
+        For the best fit, measure yourself and compare to the chart.
+      </p>
+      <div className="overflow-x-auto border border-neutral-200">
+        <table className="w-full border-collapse text-[13px]">
+          <thead>
+            <tr className="border-b border-neutral-200 bg-neutral-50">
+              <th className="px-[14px] py-[10px] text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                Size
+              </th>
+              {chart.columns.map((col) => (
+                <th
+                  key={col}
+                  className="px-[14px] py-[10px] text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500"
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {chart.rows.map((row, i) => (
+              <tr
+                key={row.size}
+                className={cn(
+                  "border-b border-neutral-100 last:border-0",
+                  i % 2 === 0 ? "bg-white" : "bg-neutral-50/60",
+                )}
+              >
+                <td className="px-[14px] py-[10px] font-semibold text-neutral-900">{row.size}</td>
+                {row.values.map((val, j) => (
+                  <td key={j} className="px-[14px] py-[10px] text-neutral-700">
+                    {val}
+                  </td>
                 ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Notes */}
-          {chart.notes ? (
-            <div className="mt-5 rounded-xl bg-neutral-50 px-4 py-4 text-sm text-neutral-600">
-              <p className="mb-1 font-medium text-ink">Notes</p>
-              <p className="whitespace-pre-line leading-relaxed">{chart.notes}</p>
-            </div>
-          ) : null}
-
-          {/* How to measure */}
-          <div className="mt-4 rounded-xl border border-neutral-200 px-4 py-4 text-sm">
-            <p className="mb-2 flex items-center gap-1.5 font-medium text-ink">
-              <Info className="h-3.5 w-3.5 text-neutral-400" aria-hidden />
-              How to measure
-            </p>
-            <ul className="flex flex-col gap-1.5 text-neutral-600">
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 text-neutral-300">•</span>
-                <span>
-                  <strong className="text-ink">Chest</strong> - measure around the fullest part,
-                  keeping the tape horizontal
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 text-neutral-300">•</span>
-                <span>
-                  <strong className="text-ink">Waist</strong> - measure around the narrowest part
-                  of your torso
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 text-neutral-300">•</span>
-                <span>
-                  <strong className="text-ink">Length</strong> - from the highest shoulder point
-                  down to the hem
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-0.5 shrink-0 text-neutral-300">•</span>
-                <span>
-                  Between sizes? We recommend sizing <strong className="text-ink">up</strong> for
-                  a relaxed fit.
-                </span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </aside>
-    </>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {chart.notes ? (
+        <p className="mt-[12px] whitespace-pre-line text-[13px] leading-relaxed text-neutral-500">
+          {chart.notes}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -315,19 +216,19 @@ function JerseyCustomizer({
   const anyEnabled = value.nameEnabled || value.numberEnabled || value.patches.length > 0;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+    <div className="overflow-hidden border border-neutral-200 bg-white">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-100 px-[16px] py-[10px]">
         <div className="flex items-center gap-[8px]">
-          <span className="text-accent" aria-hidden>✦</span>
+          <span className="text-neutral-900" aria-hidden>✦</span>
           <h3 className="text-[14px] font-semibold text-neutral-900">Personalise your jersey</h3>
         </div>
         {totalAddOn > 0 ? (
-          <span className="rounded-[4px] bg-accent/10 px-[10px] py-[2px] text-[12px] font-bold text-accent">
+          <span className="bg-neutral-900 px-[10px] py-[2px] text-[12px] font-bold text-white">
             +{formatPrice(totalAddOn, currency)}
           </span>
         ) : anyEnabled ? (
-          <span className="rounded-[4px] bg-neutral-100 px-[10px] py-[2px] text-[12px] font-medium text-neutral-500">
+          <span className="bg-neutral-100 px-[10px] py-[2px] text-[12px] font-medium text-neutral-500">
             Added
           </span>
         ) : (
@@ -351,10 +252,10 @@ function JerseyCustomizer({
                     aria-checked={active}
                     onClick={() => setPlacement(p)}
                     className={cn(
-                      "flex-1 rounded-lg border px-[12px] py-[8px] text-[13px] font-semibold transition-all duration-150",
+                      "flex-1 border px-[12px] py-[8px] text-[13px] font-semibold transition-all duration-150",
                       active
-                        ? "border-accent bg-accent text-ink"
-                        : "border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-300 hover:bg-white",
+                        ? "border-neutral-900 bg-neutral-900 text-white"
+                        : "border-neutral-200 bg-neutral-50 text-neutral-600 hover:border-neutral-400 hover:bg-white",
                     )}
                   >
                     {p}
@@ -383,8 +284,8 @@ function JerseyCustomizer({
               <div
                 aria-hidden
                 className={cn(
-                  "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] border-2 transition-all",
-                  value.nameEnabled ? "border-accent bg-accent text-ink" : "border-neutral-300 bg-white",
+                  "flex h-[18px] w-[18px] shrink-0 items-center justify-center border-2 transition-all",
+                  value.nameEnabled ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white",
                 )}
               >
                 {value.nameEnabled ? <Check className="h-[12px] w-[12px]" aria-hidden /> : null}
@@ -399,7 +300,7 @@ function JerseyCustomizer({
                 placeholder="YOUR NAME"
                 maxLength={12}
                 autoFocus
-                className="rounded-lg border border-neutral-200 bg-neutral-50 px-[12px] py-[10px] text-[14px] font-bold uppercase tracking-widest text-neutral-900 placeholder:font-normal placeholder:tracking-normal placeholder:text-neutral-300 focus:border-accent focus:bg-white focus:outline-none"
+                className="border border-neutral-200 bg-neutral-50 px-[12px] py-[10px] text-[14px] font-bold uppercase tracking-widest text-neutral-900 placeholder:font-normal placeholder:tracking-normal placeholder:text-neutral-300 focus:border-neutral-900 focus:bg-white focus:outline-none"
               />
             ) : null}
           </div>
@@ -420,8 +321,8 @@ function JerseyCustomizer({
               <div
                 aria-hidden
                 className={cn(
-                  "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] border-2 transition-all",
-                  value.numberEnabled ? "border-accent bg-accent text-ink" : "border-neutral-300 bg-white",
+                  "flex h-[18px] w-[18px] shrink-0 items-center justify-center border-2 transition-all",
+                  value.numberEnabled ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white",
                 )}
               >
                 {value.numberEnabled ? <Check className="h-[12px] w-[12px]" aria-hidden /> : null}
@@ -436,7 +337,7 @@ function JerseyCustomizer({
                 autoFocus
                 onChange={(e) => onChange({ ...value, number: e.target.value.replace(/\D/g, "").slice(0, 2) })}
                 placeholder="00"
-                className="w-[64px] rounded-lg border border-neutral-200 bg-neutral-50 px-[12px] py-[8px] text-center text-[20px] font-black text-neutral-900 placeholder:text-neutral-300 focus:border-accent focus:bg-white focus:outline-none"
+                className="w-[64px] border border-neutral-200 bg-neutral-50 px-[12px] py-[8px] text-center text-[20px] font-black text-neutral-900 placeholder:text-neutral-300 focus:border-neutral-900 focus:bg-white focus:outline-none"
               />
             ) : null}
           </div>
@@ -444,14 +345,14 @@ function JerseyCustomizer({
 
         {/* Personalisation fee strip */}
         {namePriceBDT > 0 && (showName || showNumber) ? (
-          <div className="flex items-center justify-between rounded-lg bg-neutral-50 px-[12px] py-[8px]">
+          <div className="flex items-center justify-between bg-neutral-50 px-[12px] py-[8px]">
             <div className="flex flex-col">
               <span className="text-[13px] font-medium text-neutral-900">Personalisation fee</span>
               <span className="text-[11px] text-neutral-500">Name, number, or both — charged once</span>
             </div>
             <span className={cn(
               "text-[14px] font-bold",
-              personalisationFee > 0 ? "text-accent" : "text-neutral-400",
+              personalisationFee > 0 ? "text-neutral-900" : "text-neutral-400",
             )}>
               +{formatPrice(namePriceBDT, currency)}
             </span>
@@ -474,10 +375,10 @@ function JerseyCustomizer({
                     onClick={() => togglePatch(patch.id)}
                     aria-pressed={selected}
                     className={cn(
-                      "flex w-full flex-col items-center gap-[6px] rounded-lg border p-[10px] text-center transition-all duration-150",
+                      "flex w-full flex-col items-center gap-[6px] border p-[10px] text-center transition-all duration-150",
                       selected
-                        ? "border-accent bg-accent/5 ring-1 ring-accent"
-                        : "border-neutral-200 bg-neutral-50 hover:border-neutral-300 hover:bg-white",
+                        ? "border-neutral-900 bg-neutral-50 ring-1 ring-neutral-900"
+                        : "border-neutral-200 bg-neutral-50 hover:border-neutral-400 hover:bg-white",
                     )}
                   >
                     {patch.imageUrl ? (
@@ -492,9 +393,9 @@ function JerseyCustomizer({
                       </div>
                     )}
                     <span className="line-clamp-2 text-[11px] font-medium leading-tight text-neutral-700">{patch.name}</span>
-                    <span className="text-[12px] font-bold text-accent">+{formatPrice(patch.price, currency)}</span>
+                    <span className="text-[12px] font-bold text-neutral-900">+{formatPrice(patch.price, currency)}</span>
                     {selected ? (
-                      <span className="absolute left-[6px] top-[6px] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-accent text-ink">
+                      <span className="absolute left-[6px] top-[6px] flex h-[18px] w-[18px] items-center justify-center rounded-full bg-neutral-900 text-white">
                         <Check className="h-[10px] w-[10px]" aria-hidden />
                       </span>
                     ) : null}
@@ -525,7 +426,7 @@ function JerseyCustomizer({
           onClick={() => setPreviewPatch(null)}
         >
           <div
-            className="w-full max-w-[320px] rounded-xl bg-white p-[16px] text-center shadow-xl"
+            className="w-full max-w-[320px] bg-white p-[16px] text-center shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-end">
@@ -554,7 +455,7 @@ function JerseyCustomizer({
               </div>
             )}
             <p className="mt-[12px] text-[15px] font-semibold text-neutral-900">{previewPatch.name}</p>
-            <p className="mt-[2px] text-[16px] font-bold text-accent">
+            <p className="mt-[2px] text-[16px] font-bold text-neutral-900">
               +{formatPrice(previewPatch.price, currency)}
             </p>
             <button
@@ -564,10 +465,10 @@ function JerseyCustomizer({
                 setPreviewPatch(null);
               }}
               className={cn(
-                "mt-[12px] w-full rounded-lg py-[10px] text-[14px] font-bold transition-opacity",
+                "mt-[12px] w-full py-[10px] text-[14px] font-bold uppercase tracking-wide transition-opacity",
                 value.patches.includes(previewPatch.id)
                   ? "border border-neutral-300 bg-white text-neutral-900 hover:bg-neutral-50"
-                  : "bg-accent text-ink hover:opacity-90",
+                  : "bg-neutral-900 text-white hover:opacity-90",
               )}
             >
               {value.patches.includes(previewPatch.id) ? "Remove patch" : "Add patch"}
@@ -586,16 +487,6 @@ export interface ProductDetailClientProps {
   customizationConfig?: PublicCustomizationConfig | null;
   siteSettings?: { delivery?: SiteSettingsDelivery | null; contact?: SiteSettingsContact | null } | null;
   className?: string;
-}
-
-/** One label/value row in the Highlights / Information cards. */
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-[12px] py-[10px]">
-      <dt className="text-[13px] text-neutral-500">{label}</dt>
-      <dd className="text-[13px] leading-relaxed text-neutral-700">{children}</dd>
-    </div>
-  );
 }
 
 // ─── Full-screen image lightbox ────────────────────────────────────────────
@@ -735,7 +626,7 @@ function ImageLightbox({
               onClick={() => go(i)}
               aria-label={`View image ${i + 1}`}
               className={cn(
-                "relative h-[56px] w-[56px] shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                "relative h-[56px] w-[56px] shrink-0 overflow-hidden border-2 transition-all",
                 i === idx
                   ? "border-white opacity-100"
                   : "border-white/20 opacity-50 hover:border-white/50 hover:opacity-80",
@@ -765,8 +656,6 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
   // Hover-zoom is desktop-only — disabled on touch / tablet and on viewports below lg
   const [canZoom, setCanZoom] = React.useState(false);
   const [qty, setQty] = React.useState(1);
-  const [sizeChartOpen, setSizeChartOpen] = React.useState(false);
-  const [descExpanded, setDescExpanded] = React.useState(false);
   const [ctaVisible, setCtaVisible] = React.useState(true);
   const [ctaEverVisible, setCtaEverVisible] = React.useState(false);
   const [bottomPassed, setBottomPassed] = React.useState(false);
@@ -850,6 +739,18 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
     setQty(1);
   }, [matchedVariant?._id]);
 
+  // When the selected variant has its own photo, jump the gallery to it (the
+  // arrows / thumbnails then keep working over the full image list).
+  React.useEffect(() => {
+    const vImg = matchedVariant?.image;
+    if (!vImg) return;
+    const i = product.images.findIndex((img) => img.url === vImg);
+    if (i >= 0) {
+      setImageIdx(i);
+      setShowVideo(false);
+    }
+  }, [matchedVariant?._id, matchedVariant?.image, product.images]);
+
   React.useEffect(() => {
     const ctaEl = ctaRef.current;
     if (!ctaEl) return;
@@ -872,20 +773,11 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
     };
   }, []);
 
-  const heroImage =
-    matchedVariant?.image
-      ? { url: matchedVariant.image, alt: product.title }
-      : (product.images[imageIdx] ?? product.images[0]);
+  const heroImage = product.images[imageIdx] ?? product.images[0];
 
   // ── Category data ─────────────────────────────────────────────────────────
   const primaryCategory =
     typeof product.category === "object" ? product.category : undefined;
-
-  // ── Facts pulled from the seller's free-form attributes, if entered ───────
-  const netQty = findAttr(product.attributes, ["net qty", "net quantity", "weight", "pack size", "unit size"]);
-  const countryOfOrigin = findAttr(product.attributes, ["country of origin", "origin", "made in", "manufactured in"]);
-  const shelfLife = findAttr(product.attributes, ["shelf life", "expiry", "best before"]);
-  const sellerRef = typeof product.seller === "object" ? product.seller : undefined;
 
   // ── Customization assignments ─────────────────────────────────────────────
   // The server-rendered prop can be stale (the PDP HTML sits in the Full
@@ -975,8 +867,6 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
   // ── Seller ────────────────────────────────────────────────────────────────
   const brandName =
     typeof product.brand === "object" && product.brand ? product.brand.name : undefined;
-  const brandSlug =
-    typeof product.brand === "object" && product.brand ? product.brand.slug : undefined;
 
   const cartOptions: Record<string, string> | undefined = React.useMemo(() => {
     if (matchedVariant?.options && Object.keys(matchedVariant.options).length > 0) {
@@ -996,6 +886,33 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
       category: primaryCategory?.name,
       brand: brandName,
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product._id]);
+
+  // ── Recently viewed (feeds the rail at the bottom of the PDP) ─────────────
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENTLY_VIEWED_KEY);
+      const list: unknown[] = raw ? JSON.parse(raw) : [];
+      const entry = {
+        slug: product.slug,
+        title: product.title,
+        image: product.images[0]?.url ?? "",
+        price: product.price,
+        compareAtPrice: product.compareAtPrice,
+        currency: product.currency,
+      };
+      const next = [
+        entry,
+        ...(Array.isArray(list) ? list : []).filter(
+          (i): i is { slug: string } =>
+            !!i && typeof i === "object" && (i as { slug?: string }).slug !== product.slug,
+        ),
+      ].slice(0, 12);
+      localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(next));
+    } catch {
+      // storage unavailable — the rail just won't render
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product._id]);
 
@@ -1123,6 +1040,14 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
     return () => mq.removeEventListener("change", update);
   }, []);
 
+  const selectImage = (i: number) => {
+    setImageIdx(i);
+    setShowVideo(false);
+  };
+  const prevImage = () =>
+    selectImage((imageIdx - 1 + product.images.length) % product.images.length);
+  const nextImage = () => selectImage((imageIdx + 1) % product.images.length);
+
   const onGalleryTouchStart = (e: React.TouchEvent) =>
     setTouchStartX(e.touches[0]?.clientX ?? null);
   const onGalleryTouchEnd = (e: React.TouchEvent) => {
@@ -1131,40 +1056,54 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
     if (Math.abs(delta) > 40) {
       // Swiping while the video is up returns to the image gallery.
       if (showVideo) setShowVideo(false);
-      else {
-        setImageIdx((i) =>
-          delta > 0 ? Math.min(product.images.length - 1, i + 1) : Math.max(0, i - 1),
-        );
-      }
+      else delta > 0 ? nextImage() : prevImage();
     }
     setTouchStartX(null);
   };
 
   const productVideo = product.video ?? null;
-  const selectImage = (i: number) => {
-    setImageIdx(i);
-    setShowVideo(false);
-  };
-  // The thumbnail rails render when there's more than one thing to pick from.
+  // The thumbnail strip renders when there's more than one thing to pick from.
   const galleryCount = product.images.length + (productVideo ? 1 : 0);
 
-  // Is the size axis present? - used to position "Size Guide" next to it
-  const sizeAxisIndex = optionAxes.findIndex(([axis]) =>
-    axis.toLowerCase().includes("size"),
-  );
-  // Always show size guide - use the product's own chart or the default general guide
-  const sizeChart = product.sizeChart ?? DEFAULT_SIZE_CHART;
-  const hasSizeChart = true;
+  // "New" ribbon — same as the reference site's badge on fresh arrivals.
+  const isNewProduct = React.useMemo(() => {
+    const created = Date.parse(product.createdAt);
+    if (Number.isNaN(created)) return false;
+    return Date.now() - created < 45 * 24 * 60 * 60 * 1000;
+  }, [product.createdAt]);
+
+  // SKU / Product Type lines under the title, as on the reference.
+  const displaySku = matchedVariant?.sku ?? product.sku ?? product.variants[0]?.sku;
+  const productType = primaryCategory?.name ?? brandName;
+
+  // Always show a size guide - the product's own chart when it actually has
+  // rows, otherwise the default general guide.
+  const sizeChart =
+    product.sizeChart && product.sizeChart.rows.length > 0
+      ? product.sizeChart
+      : DEFAULT_SIZE_CHART;
+
+  /**
+   * Is a value on an axis buyable at all? Used to strike through sold-out
+   * sizes exactly like the reference ("14.5/xs" crossed out). A value is
+   * unavailable when every active variant carrying it is out of stock.
+   */
+  const isValueAvailable = (axis: string, value: string): boolean => {
+    if (!product.trackStock) return true;
+    return product.variants.some(
+      (v) => (v.isActive ?? true) && v.options?.[axis] === value && v.stock > 0,
+    );
+  };
+
+  /** Image swatch for a color value - the photo of a variant in that color. */
+  const swatchImageFor = (axis: string, value: string): string | undefined =>
+    product.variants.find((v) => v.options?.[axis] === value && v.image)?.image ??
+    (optionAxes.length === 1 || product.variants.every((v) => v.options?.[axis] === value)
+      ? product.images[0]?.url
+      : undefined);
 
   return (
     <section className={cn("pb-24 lg:pb-0", className)}>
-      {/* Size chart drawer */}
-      <SizeChartDrawer
-        chart={sizeChart}
-        open={sizeChartOpen}
-        onClose={() => setSizeChartOpen(false)}
-      />
-
       {/* Full-screen image lightbox */}
       {lightboxOpen ? (
         <ImageLightbox
@@ -1176,540 +1115,419 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
       ) : null}
 
       {/*
-        FC Barcelona / Fanatics-style PDP layout (2-column):
-        - lg+:    [Large gallery, sticky] | [Info column with inline buy block]
-        - md:     same 2-col, narrower info column
-        - mobile: [Gallery] → [Info + CTA] stacked, sticky add-to-bag bar
+        Yellow-style PDP layout (2-column):
+        - lg+:    [Gallery with arrows + thumbnail strip below] | [Info column]
+        - mobile: stacked, with a sticky add-to-cart bar
       */}
-      <div className="grid grid-cols-1 gap-3 md:gap-5 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] md:gap-5 lg:gap-6">
 
-        {/* ── GALLERY (col 1 — large, sticky) ─────────────────────────── */}
+        {/* ── GALLERY ─────────────────────────────────────────────────── */}
         <div className="md:sticky md:top-4 md:self-start">
-          <div className="-mx-2 sm:mx-0 flex gap-2 sm:gap-3">
+          {/* Main image */}
+          <div
+            role={canZoom ? "button" : undefined}
+            tabIndex={canZoom ? 0 : undefined}
+            aria-label={showVideo ? "Product video" : canZoom ? "View full screen" : undefined}
+            className={cn(
+              "group relative aspect-[4/5] w-full overflow-hidden bg-neutral-100 outline-none",
+              showVideo || !canZoom ? "cursor-default" : "cursor-zoom-in",
+            )}
+            onClick={() => canZoom && !showVideo && heroImage && setLightboxOpen(true)}
+            onKeyDown={(e) => e.key === "Enter" && canZoom && !showVideo && heroImage && setLightboxOpen(true)}
+            onTouchStart={onGalleryTouchStart}
+            onTouchEnd={onGalleryTouchEnd}
+            onMouseMove={canZoom && !showVideo ? (e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setZoomPoint({
+                x: ((e.clientX - r.left) / r.width) * 100,
+                y: ((e.clientY - r.top) / r.height) * 100,
+              });
+            } : undefined}
+            onMouseLeave={canZoom && !showVideo ? () => setZoomPoint(null) : undefined}
+          >
+            {showVideo && productVideo ? (
+              <video
+                key={productVideo.url}
+                src={productVideo.url}
+                poster={productVideo.posterUrl}
+                controls
+                autoPlay
+                muted
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 h-full w-full bg-black object-contain"
+              />
+            ) : heroImage ? (
+              <div
+                className="absolute inset-0"
+                style={canZoom && zoomPoint ? {
+                  transform: "scale(2.2)",
+                  transformOrigin: `${zoomPoint.x}% ${zoomPoint.y}%`,
+                  transition: "transform 0.08s ease-out",
+                } : {
+                  transform: "scale(1)",
+                  transition: "transform 0.25s ease-out",
+                }}
+              >
+                <Image
+                  src={heroImage.url}
+                  alt={heroImage.alt ?? product.title}
+                  fill
+                  priority
+                  sizes="(min-width: 1024px) 50vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-sm text-neutral-400">
+                No image
+              </div>
+            )}
 
-            {/* Vertical thumbnail rail (sm+) */}
-            {galleryCount > 1 ? (
-              <ul className="hidden sm:flex w-[64px] shrink-0 flex-col gap-2 overflow-y-auto" style={{ maxHeight: "480px" }}>
-                {product.images.map((img, i) => (
-                  <li key={img._id ?? i} className="shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => selectImage(i)}
-                      onMouseEnter={() => selectImage(i)}
-                      aria-label={`Show image ${i + 1}`}
-                      className={cn(
-                        "relative aspect-square w-full overflow-hidden rounded-lg border-2 transition-all",
-                        !showVideo && i === imageIdx
-                          ? "border-ink shadow-sm"
-                          : "border-neutral-200 hover:border-neutral-400",
-                      )}
-                    >
-                      <Image
-                        src={img.url}
-                        alt={img.alt ?? product.title}
-                        fill
-                        sizes="64px"
-                        className="object-cover"
-                      />
-                    </button>
-                  </li>
-                ))}
-                {productVideo ? (
-                  <li className="shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowVideo(true)}
-                      aria-label="Play product video"
-                      className={cn(
-                        "relative aspect-square w-full overflow-hidden rounded-lg border-2 bg-neutral-900 transition-all",
-                        showVideo ? "border-ink shadow-sm" : "border-neutral-200 hover:border-neutral-400",
-                      )}
-                    >
-                      {productVideo.posterUrl ? (
-                        <Image
-                          src={productVideo.posterUrl}
-                          alt=""
-                          fill
-                          sizes="64px"
-                          className="object-cover"
-                        />
-                      ) : null}
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-white/90">
-                          <Play className="h-[12px] w-[12px] translate-x-[1px] fill-ink text-ink" aria-hidden />
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ) : null}
-              </ul>
+            {/* "New" ribbon / sale badge — white tab pinned to the top-left edge */}
+            {!showVideo ? (
+              isNewProduct ? (
+                <span className="absolute left-0 top-[14px] z-10 bg-white px-[12px] py-[5px] text-[13px] font-medium text-neutral-900 shadow-sm">
+                  New
+                </span>
+              ) : onSale ? (
+                <span className="absolute left-0 top-[14px] z-10 bg-neutral-900 px-[12px] py-[5px] text-[13px] font-medium text-white shadow-sm">
+                  -{discountPct}%
+                </span>
+              ) : null
             ) : null}
 
-            {/* Main image */}
-            <div className="min-w-0 flex-1">
-              {/* Fullscreen lightbox is desktop-only (canZoom = fine pointer +
-                  hover). On mobile/tablet a tap does nothing - swipe changes
-                  images instead. */}
-              <div
-                role={canZoom ? "button" : undefined}
-                tabIndex={canZoom ? 0 : undefined}
-                aria-label={showVideo ? "Product video" : canZoom ? "View full screen" : undefined}
-                className={cn(
-                  "group relative aspect-[4/5] w-full overflow-hidden bg-neutral-50 outline-none sm:rounded-xl sm:border sm:border-neutral-100",
-                  showVideo || !canZoom ? "cursor-default" : "cursor-zoom-in",
-                )}
-                onClick={() => canZoom && !showVideo && heroImage && setLightboxOpen(true)}
-                onKeyDown={(e) => e.key === "Enter" && canZoom && !showVideo && heroImage && setLightboxOpen(true)}
-                onTouchStart={onGalleryTouchStart}
-                onTouchEnd={onGalleryTouchEnd}
-                onMouseMove={canZoom && !showVideo ? (e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  setZoomPoint({
-                    x: ((e.clientX - r.left) / r.width) * 100,
-                    y: ((e.clientY - r.top) / r.height) * 100,
-                  });
-                } : undefined}
-                onMouseLeave={canZoom && !showVideo ? () => setZoomPoint(null) : undefined}
-              >
-                {showVideo && productVideo ? (
-                  <video
-                    key={productVideo.url}
-                    src={productVideo.url}
-                    poster={productVideo.posterUrl}
-                    controls
-                    autoPlay
-                    muted
-                    playsInline
-                    preload="metadata"
-                    className="absolute inset-0 h-full w-full bg-black object-contain"
-                  />
-                ) : heroImage ? (
-                  <div
-                    className="absolute inset-0"
-                    style={canZoom && zoomPoint ? {
-                      transform: "scale(2.2)",
-                      transformOrigin: `${zoomPoint.x}% ${zoomPoint.y}%`,
-                      transition: "transform 0.08s ease-out",
-                    } : {
-                      transform: "scale(1)",
-                      transition: "transform 0.25s ease-out",
-                    }}
+            {/* Prev / next arrows — circular, floating over the image sides */}
+            {product.images.length > 1 && !showVideo ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); prevImage(); }}
+                  aria-label="Previous image"
+                  className="absolute left-[12px] top-1/2 z-10 flex h-[40px] w-[40px] -translate-y-1/2 items-center justify-center rounded-full border border-neutral-300 bg-white/90 text-neutral-700 shadow-sm transition-colors hover:bg-white hover:text-neutral-900"
+                >
+                  <ChevronLeft className="h-[18px] w-[18px]" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); nextImage(); }}
+                  aria-label="Next image"
+                  className="absolute right-[12px] top-1/2 z-10 flex h-[40px] w-[40px] -translate-y-1/2 items-center justify-center rounded-full border border-neutral-300 bg-white/90 text-neutral-700 shadow-sm transition-colors hover:bg-white hover:text-neutral-900"
+                >
+                  <ChevronRight className="h-[18px] w-[18px]" aria-hidden />
+                </button>
+              </>
+            ) : null}
+
+            {/* Expand hint — visible on hover (desktop) */}
+            {heroImage && !showVideo && canZoom ? (
+              <span className="pointer-events-none absolute right-[12px] top-[12px] flex h-[32px] w-[32px] items-center justify-center rounded-full bg-black/30 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
+                <Maximize2 className="h-4 w-4" aria-hidden />
+              </span>
+            ) : null}
+          </div>
+
+          {/* Thumbnail strip below the main image (all breakpoints) */}
+          {galleryCount > 1 ? (
+            <ul className="mt-3 flex gap-[10px] overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*:first-child]:ml-auto [&>*:last-child]:mr-auto">
+              {product.images.map((img, i) => (
+                <li key={img._id ?? i} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => selectImage(i)}
+                    aria-label={`Show image ${i + 1}`}
+                    className={cn(
+                      "relative h-[88px] w-[72px] overflow-hidden border transition-all",
+                      !showVideo && i === imageIdx
+                        ? "border-neutral-900"
+                        : "border-neutral-200 opacity-80 hover:border-neutral-400 hover:opacity-100",
+                    )}
                   >
                     <Image
-                      src={heroImage.url}
-                      alt={heroImage.alt ?? product.title}
+                      src={img.url}
+                      alt={img.alt ?? product.title}
                       fill
-                      priority
-                      sizes="(min-width: 1280px) 35vw, (min-width: 1024px) 45vw, 100vw"
-                      className="object-contain"
+                      sizes="72px"
+                      className="object-cover"
                     />
-                  </div>
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-neutral-400">
-                    No image
-                  </div>
-                )}
-                {onSale ? (
-                  <Badge variant="solid" className="absolute left-3 top-3 text-sm font-semibold">
-                    -{discountPct}%
-                  </Badge>
-                ) : null}
-                {/* Expand hint — visible on hover (desktop) */}
-                {heroImage && !showVideo && canZoom ? (
-                  <span className="pointer-events-none absolute right-3 top-3 flex h-[32px] w-[32px] items-center justify-center rounded-full bg-black/30 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
-                    <Maximize2 className="h-4 w-4" aria-hidden />
-                  </span>
-                ) : null}
-                {/* Swipe dots - mobile only */}
-                {product.images.length > 1 && !showVideo ? (
-                  <div className="absolute inset-x-0 bottom-3 flex justify-center gap-1.5 sm:hidden" aria-hidden>
-                    {product.images.map((_, i) => (
-                      <span
-                        key={i}
-                        className={cn(
-                          "h-1.5 rounded-full transition-all duration-200",
-                          i === imageIdx ? "w-5 bg-ink" : "w-1.5 bg-ink/40",
-                        )}
+                  </button>
+                </li>
+              ))}
+              {productVideo ? (
+                <li className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowVideo(true)}
+                    aria-label="Play product video"
+                    className={cn(
+                      "relative h-[88px] w-[72px] overflow-hidden border bg-neutral-900 transition-all",
+                      showVideo ? "border-neutral-900" : "border-neutral-200 opacity-80 hover:border-neutral-400 hover:opacity-100",
+                    )}
+                  >
+                    {productVideo.posterUrl ? (
+                      <Image
+                        src={productVideo.posterUrl}
+                        alt=""
+                        fill
+                        sizes="72px"
+                        className="object-cover"
                       />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Horizontal thumbnail strip - mobile only */}
-              {galleryCount > 1 ? (
-                <ul className="mt-2 flex gap-1.5 overflow-x-auto px-2 pb-1 sm:hidden sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {product.images.map((img, i) => (
-                    <li key={img._id ?? i} className="shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => selectImage(i)}
-                        aria-label={`Show image ${i + 1}`}
-                        className={cn(
-                          "relative h-[52px] w-[52px] overflow-hidden rounded-lg border-2 transition-all",
-                          !showVideo && i === imageIdx ? "border-ink" : "border-neutral-200",
-                        )}
-                      >
-                        <Image
-                          src={img.url}
-                          alt={img.alt ?? product.title}
-                          fill
-                          sizes="52px"
-                          className="object-cover"
-                        />
-                      </button>
-                    </li>
-                  ))}
-                  {productVideo ? (
-                    <li className="shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setShowVideo(true)}
-                        aria-label="Play product video"
-                        className={cn(
-                          "relative h-[52px] w-[52px] overflow-hidden rounded-lg border-2 bg-neutral-900 transition-all",
-                          showVideo ? "border-ink" : "border-neutral-200",
-                        )}
-                      >
-                        {productVideo.posterUrl ? (
-                          <Image
-                            src={productVideo.posterUrl}
-                            alt=""
-                            fill
-                            sizes="52px"
-                            className="object-cover"
-                          />
-                        ) : null}
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <span className="flex h-[20px] w-[20px] items-center justify-center rounded-full bg-white/90">
-                            <Play className="h-[10px] w-[10px] translate-x-[1px] fill-ink text-ink" aria-hidden />
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ) : null}
-                </ul>
+                    ) : null}
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <span className="flex h-[24px] w-[24px] items-center justify-center rounded-full bg-white/90">
+                        <Play className="h-[12px] w-[12px] translate-x-[1px] fill-ink text-ink" aria-hidden />
+                      </span>
+                    </span>
+                  </button>
+                </li>
               ) : null}
-            </div>
-          </div>
+            </ul>
+          ) : null}
         </div>
 
-        {/* ── PRODUCT INFO (col 2) ─────────────────────────────────────── */}
-        <div className="flex min-w-0 flex-col gap-[16px]">
+        {/* ── PRODUCT INFO ─────────────────────────────────────────────── */}
+        <div className="flex min-w-0 flex-col px-1 sm:px-0">
 
-          {/* Brand · Title · Net qty · Rating · Price — bordered card, Zepto-style */}
-          <div className="relative flex flex-col gap-[8px] rounded-xl border border-neutral-200 p-[16px]">
-            {/* Share — circular icon button, top right */}
+          {/* Title + Share */}
+          <div className="flex items-start justify-between gap-[16px]">
+            <h1 className="text-[24px] font-bold normal-case leading-tight tracking-normal text-neutral-900 sm:text-[28px]">
+              {product.title}
+            </h1>
             <button
               type="button"
               onClick={onShare}
               aria-label="Share this product"
-              className="absolute right-[16px] top-[16px] flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-400 hover:text-ink"
+              className="mt-[6px] flex shrink-0 items-center gap-[6px] text-[13px] text-neutral-700 transition-colors hover:text-neutral-900"
             >
-              <Share2 className="h-[15px] w-[15px]" aria-hidden />
+              <Share2 className="h-[16px] w-[16px]" aria-hidden />
+              <span className="underline underline-offset-2">Share</span>
             </button>
-
-            {brandName ? (
-              <Link
-                href={brandSlug ? `/all-products?brand=${encodeURIComponent(brandSlug)}` : "#"}
-                className="w-fit pr-[44px] text-[13px] font-medium uppercase tracking-wide text-neutral-400 transition-colors hover:text-neutral-600"
-              >
-                {brandName}
-              </Link>
-            ) : null}
-
-            <h1 className="pr-[44px] text-[20px] font-semibold normal-case leading-snug tracking-normal text-neutral-900 sm:text-[24px]">
-              {product.title}
-            </h1>
-
-            {netQty ? <p className="text-[13px] text-neutral-500">Net Qty: {netQty}</p> : null}
-
-            {product.ratingCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => document.getElementById("reviews")?.scrollIntoView({ behavior: "smooth" })}
-                className="flex w-fit items-center gap-[8px] text-[13px] text-neutral-500 transition-colors hover:text-neutral-700"
-              >
-                <RatingStars value={product.ratingAverage} size="sm" />
-                <span>
-                  {product.ratingAverage.toFixed(1)} · {product.ratingCount.toLocaleString()} reviews
-                </span>
-              </button>
-            ) : null}
-
-            {/* Price — green badge + MRP + amount-off, same treatment as the storefront cards */}
-            <div className="flex flex-col gap-[4px] pt-[2px]">
-              <div className="flex flex-wrap items-center gap-[10px]">
-                <span className="rounded-[8px] bg-green-700 px-[14px] py-[7px] text-[22px] font-extrabold leading-none text-white sm:text-[26px]">
-                  {formatPrice(totalPrice, product.currency)}
-                </span>
-                <span className="text-[13px] text-neutral-500">
-                  {onSale ? (
-                    <>
-                      MRP <span className="line-through">{formatPrice(effectiveCompareAt, product.currency)}</span>
-                    </>
-                  ) : null}{" "}
-                  <span className="text-neutral-400">(incl. of all taxes)</span>
-                </span>
-              </div>
-              {onSale ? (
-                <div className="flex items-center gap-[8px]">
-                  <span className="shrink-0 text-[13px] font-bold text-green-700">
-                    {formatPrice(effectiveCompareAt - totalPrice, product.currency)} OFF
-                  </span>
-                  <span className="h-0 flex-1 border-t border-dashed border-neutral-300" aria-hidden />
-                </div>
-              ) : null}
-            </div>
-
-            {customTotal > 0 ? (
-              <p className="text-[12px] text-neutral-500">
-                Base {formatPrice(effectivePrice, product.currency)} + personalisation{" "}
-                <span className="font-semibold text-accent">{formatPrice(customTotal, product.currency)}</span>
-              </p>
-            ) : null}
-
-            {product.activeOffer ? (
-              <Link
-                href={`/offers/${product.activeOffer.slug}`}
-                className="inline-flex w-fit items-center gap-[4px] text-[13px] font-semibold text-accent hover:underline"
-              >
-                <Tag className="h-[14px] w-[14px]" aria-hidden />
-                {product.activeOffer.name}
-              </Link>
-            ) : null}
-
-            {/* Feature chips — delivery / returns, real copy (not fabricated per-product claims) */}
-            <div className="mt-[6px] grid grid-cols-2 gap-[10px] border-t border-neutral-100 pt-[14px]">
-              <div className="flex flex-col items-center gap-[6px] rounded-xl bg-neutral-50 py-[12px] text-center">
-                <Truck className="h-[20px] w-[20px] text-neutral-500" aria-hidden />
-                <span className="text-[11px] font-medium text-neutral-600">Fast delivery</span>
-              </div>
-              <div className="flex flex-col items-center gap-[6px] rounded-xl bg-neutral-50 py-[12px] text-center">
-                <RotateCcw className="h-[20px] w-[20px] text-neutral-500" aria-hidden />
-                <span className="text-[11px] font-medium text-neutral-600">Easy 7-day returns</span>
-              </div>
-            </div>
           </div>
 
-          {/* ③ Short description */}
-          {product.shortDescription ? (
-            <p className="text-[14px] leading-relaxed text-neutral-500">{product.shortDescription}</p>
-          ) : null}
+          {/* SKU / Product Type */}
+          <dl className="mt-[16px] flex flex-col gap-[6px] text-[14px]">
+            {displaySku ? (
+              <div className="flex gap-[8px]">
+                <dt className="text-neutral-500">SKU:</dt>
+                <dd className="text-neutral-900">{displaySku}</dd>
+              </div>
+            ) : null}
+            {productType ? (
+              <div className="flex gap-[8px]">
+                <dt className="text-neutral-500">Product Type:</dt>
+                <dd className="text-neutral-900">{productType}</dd>
+              </div>
+            ) : null}
+          </dl>
 
-          {/* Variant pickers */}
-          {optionAxes.length > 0 ? (
-            <div className="flex flex-col gap-[16px]">
-              {optionAxes.map(([axis, values]) => {
-                const isSizeAxis = axis.toLowerCase().includes("size");
-                return (
-                  <div key={axis} className="flex flex-col gap-[8px]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[14px] font-medium text-neutral-900">
-                        {axis}
-                        {selectedOptions[axis] ? (
-                          <span className="ml-[8px] font-normal text-neutral-500">
-                            {selectedOptions[axis]}
-                          </span>
-                        ) : null}
-                      </span>
-                      {isSizeAxis && hasSizeChart ? (
-                        <button
-                          type="button"
-                          onClick={() => setSizeChartOpen(true)}
-                          className="inline-flex items-center gap-[6px] text-[13px] font-medium text-accent transition-opacity hover:opacity-80"
-                        >
-                          <Ruler className="h-[14px] w-[14px]" aria-hidden />
-                          Size guide
-                        </button>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-[8px]">
-                      {values.map((v) => {
-                        const active = selectedOptions[axis] === v;
-                        return (
-                          <button
-                            key={v}
-                            type="button"
-                            onClick={() => onSelectOption(axis, v)}
-                            className={cn(
-                              "inline-flex h-[40px] min-w-[48px] items-center justify-center rounded-lg border px-[12px] text-[14px] font-medium transition-all duration-150",
-                              active
-                                ? "border-accent bg-accent text-ink"
-                                : "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-400",
-                            )}
-                          >
-                            {v}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-              {sizeAxisIndex === -1 && hasSizeChart ? (
-                <button
-                  type="button"
-                  onClick={() => setSizeChartOpen(true)}
-                  className="w-fit text-[11px] text-neutral-400 underline underline-offset-2 hover:text-ink"
-                >
-                  Size guide
-                </button>
-              ) : null}
-            </div>
-          ) : hasSizeChart ? (
+          {/* Rating (only when reviews exist) */}
+          {product.ratingCount > 0 ? (
             <button
               type="button"
-              onClick={() => setSizeChartOpen(true)}
-              className="w-fit text-[11px] text-neutral-400 underline underline-offset-2 hover:text-ink"
+              onClick={() => document.getElementById("reviews")?.scrollIntoView({ behavior: "smooth" })}
+              className="mt-[10px] flex w-fit items-center gap-[8px] text-[13px] text-neutral-500 transition-colors hover:text-neutral-700"
             >
-              Size guide
+              <RatingStars value={product.ratingAverage} size="sm" />
+              <span>
+                {product.ratingAverage.toFixed(1)} · {product.ratingCount.toLocaleString()} reviews
+              </span>
             </button>
           ) : null}
 
-          {/* Buy block — single column, Flowbite spacing */}
-          <div ref={ctaRef} className="flex flex-col gap-[12px] border-t border-neutral-100 pt-[16px]">
+          {/* Price */}
+          <div className="mt-[16px] flex flex-wrap items-baseline gap-[10px]">
+            <span className="text-[22px] font-bold text-neutral-900">
+              {formatPrice(totalPrice, product.currency)}
+            </span>
+            <span className="text-[14px] text-neutral-500">+ VAT</span>
+            {onSale ? (
+              <>
+                <span className="text-[15px] text-neutral-400 line-through">
+                  {formatPrice(effectiveCompareAt, product.currency)}
+                </span>
+                <span className="text-[13px] font-semibold text-neutral-900">
+                  Save {discountPct}%
+                </span>
+              </>
+            ) : null}
+          </div>
 
-            {/* Stock */}
-            {outOfStock ? (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-red-500">
-                <span className="h-2 w-2 rounded-full bg-red-500" aria-hidden />
-                Out of stock
+          {customTotal > 0 ? (
+            <p className="mt-[4px] text-[12px] text-neutral-500">
+              Base {formatPrice(effectivePrice, product.currency)} + personalisation{" "}
+              <span className="font-semibold text-neutral-900">
+                {formatPrice(customTotal, product.currency)}
               </span>
+            </p>
+          ) : null}
+
+          {product.activeOffer ? (
+            <Link
+              href={`/offers/${product.activeOffer.slug}`}
+              className="mt-[8px] inline-flex w-fit items-center gap-[6px] text-[13px] font-semibold text-neutral-900 underline underline-offset-2 hover:text-neutral-600"
+            >
+              <Tag className="h-[14px] w-[14px]" aria-hidden />
+              {product.activeOffer.name}
+            </Link>
+          ) : null}
+
+          {/* Variant axes — color as image swatches, size as pill text, rest as boxes */}
+          {optionAxes.map(([axis, values]) => {
+            const lower = axis.toLowerCase();
+            const isColorAxis = lower.includes("color") || lower.includes("colour");
+            const isSizeAxis = lower.includes("size");
+            const selected = selectedOptions[axis];
+
+            if (isColorAxis) {
+              return (
+                <div key={axis} className="mt-[24px]">
+                  <p className="text-[15px] text-neutral-900">
+                    {axis} - <span className="uppercase">{selected ?? ""}</span>
+                  </p>
+                  <div className="mt-[10px] flex flex-wrap gap-[10px]">
+                    {values.map((v) => {
+                      const active = selected === v;
+                      const swatch = swatchImageFor(axis, v);
+                      return swatch ? (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => onSelectOption(axis, v)}
+                          aria-label={`${axis}: ${v}`}
+                          aria-pressed={active}
+                          title={v}
+                          className={cn(
+                            "relative h-[92px] w-[76px] overflow-hidden border bg-neutral-100 p-[3px] transition-all",
+                            active
+                              ? "border-neutral-900"
+                              : "border-neutral-200 hover:border-neutral-400",
+                          )}
+                        >
+                          <Image src={swatch} alt={v} fill sizes="76px" className="object-cover p-[3px]" />
+                        </button>
+                      ) : (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => onSelectOption(axis, v)}
+                          aria-pressed={active}
+                          className={cn(
+                            "border px-[14px] py-[8px] text-[13px] uppercase transition-all",
+                            active
+                              ? "border-neutral-900 text-neutral-900"
+                              : "border-neutral-200 text-neutral-600 hover:border-neutral-400",
+                          )}
+                        >
+                          {v}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            if (isSizeAxis) {
+              return (
+                <div key={axis} className="mt-[24px]">
+                  <p className="text-[15px] text-neutral-900">{axis}</p>
+                  <div className="mt-[10px] flex flex-wrap items-center gap-x-[6px] gap-y-[10px]">
+                    {values.map((v) => {
+                      const active = selected === v;
+                      const available = isValueAvailable(axis, v);
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => onSelectOption(axis, v)}
+                          aria-pressed={active}
+                          className={cn(
+                            "min-w-[52px] rounded-full border px-[14px] py-[9px] text-[14px] lowercase transition-all",
+                            active
+                              ? "border-neutral-900 font-medium text-neutral-900"
+                              : "border-transparent text-neutral-700 hover:text-neutral-900",
+                            !available && "text-neutral-400 line-through hover:text-neutral-400",
+                          )}
+                        >
+                          {v}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={axis} className="mt-[24px]">
+                <p className="text-[15px] text-neutral-900">
+                  {axis}
+                  {selected ? <span className="ml-[8px] text-neutral-500">{selected}</span> : null}
+                </p>
+                <div className="mt-[10px] flex flex-wrap gap-[8px]">
+                  {values.map((v) => {
+                    const active = selected === v;
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => onSelectOption(axis, v)}
+                        aria-pressed={active}
+                        className={cn(
+                          "inline-flex h-[40px] min-w-[48px] items-center justify-center border px-[12px] text-[14px] transition-all",
+                          active
+                            ? "border-neutral-900 text-neutral-900"
+                            : "border-neutral-200 text-neutral-600 hover:border-neutral-400",
+                        )}
+                      >
+                        {v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Stock + quantity */}
+          <div className="mt-[20px] flex flex-wrap items-center gap-x-[20px] gap-y-[10px]">
+            <div className="inline-flex items-center border border-neutral-300">
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.max(1, q - 1))}
+                disabled={qty <= 1}
+                aria-label="Decrease quantity"
+                className="flex h-[40px] w-[40px] items-center justify-center text-[18px] text-neutral-600 transition-colors hover:text-neutral-900 disabled:opacity-30"
+              >
+                −
+              </button>
+              <span className="w-[40px] select-none border-x border-neutral-300 py-[9px] text-center text-[14px] font-semibold text-neutral-900">
+                {qty}
+              </span>
+              <button
+                type="button"
+                onClick={() => setQty((q) => Math.min(remaining, q + 1))}
+                disabled={product.trackStock && qty >= remaining}
+                aria-label="Increase quantity"
+                className="flex h-[40px] w-[40px] items-center justify-center text-[18px] text-neutral-600 transition-colors hover:text-neutral-900 disabled:opacity-30"
+              >
+                +
+              </button>
+            </div>
+            {outOfStock ? (
+              <span className="text-[13px] font-medium text-red-500">Out of stock</span>
             ) : effectiveStock < 10 && product.trackStock ? (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-amber-600">
-                <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
+              <span className="text-[13px] font-medium text-amber-600">
                 Only {effectiveStock} left
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-                <span className="h-2 w-2 rounded-full bg-green-500" aria-hidden />
-                In stock
-              </span>
+              <span className="text-[13px] font-medium text-green-700">In stock</span>
             )}
-
-            {/* Qty stepper */}
-            <div className="flex items-center gap-[12px]">
-              <span className="text-[14px] font-medium text-neutral-900">Qty</span>
-              <div className="inline-flex items-center rounded-lg border border-neutral-200">
-                <button
-                  type="button"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
-                  disabled={qty <= 1}
-                  aria-label="Decrease quantity"
-                  className="flex h-9 w-9 items-center justify-center text-xl text-neutral-500 transition-colors hover:text-ink disabled:opacity-30"
-                >
-                  −
-                </button>
-                <span className="w-9 select-none border-x border-neutral-200 py-2 text-center text-sm font-bold text-ink">{qty}</span>
-                <button
-                  type="button"
-                  onClick={() => setQty((q) => Math.min(remaining, q + 1))}
-                  disabled={product.trackStock && qty >= remaining}
-                  aria-label="Increase quantity"
-                  className="flex h-9 w-9 items-center justify-center text-xl text-neutral-500 transition-colors hover:text-ink disabled:opacity-30"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            {/* Delivery nudge */}
-            {freeThreshold > 0 ? (
-              qualifiesForFree ? (
-                <p className="text-xs font-medium text-green-600">Free delivery applies to this order</p>
-              ) : (
-                <p className="text-xs text-neutral-400">
-                  Add{" "}
-                  <span className="font-medium text-neutral-600">
-                    {formatPrice(amountToFree, product.currency)}
-                  </span>{" "}
-                  more for free delivery
-                </p>
-              )
-            ) : null}
-
-            {/* Add to cart - Flowbite primary in the Solobo accent */}
-            <button
-              type="button"
-              onClick={onAddToCart}
-              disabled={outOfStock}
-              className="flex h-[48px] w-full items-center justify-center gap-[8px] rounded-lg bg-accent text-[15px] font-semibold text-white transition-all hover:bg-accent-dark active:scale-[0.99] disabled:opacity-40"
-            >
-              <ShoppingCart className="h-[18px] w-[18px]" aria-hidden />
-              {outOfStock ? "Out of stock" : "Add to cart"}
-            </button>
-
-            {/* Buy now - Flowbite alternative */}
-            <button
-              type="button"
-              onClick={onBuyNow}
-              disabled={outOfStock}
-              className="flex h-[48px] w-full items-center justify-center rounded-lg border border-neutral-300 bg-white text-[15px] font-semibold text-neutral-900 transition-all hover:bg-neutral-100 active:scale-[0.99] disabled:opacity-40"
-            >
-              Buy now
-            </button>
-
-            {/* Wishlist + Share */}
-            <div className="flex items-center justify-center gap-5 pt-1">
-              <button
-                type="button"
-                onClick={onToggleWishlist}
-                className={cn(
-                  "flex items-center gap-1.5 text-[12px] font-medium transition-colors",
-                  inWishlist ? "text-red-500" : "text-neutral-400 hover:text-ink",
-                )}
-              >
-                <Heart className={cn("h-3.5 w-3.5", inWishlist && "fill-red-500")} aria-hidden />
-                {inWishlist ? "Wishlisted" : "Wishlist"}
-              </button>
-              <span className="text-neutral-200" aria-hidden>|</span>
-              <button
-                type="button"
-                onClick={onShare}
-                className="flex items-center gap-1.5 text-[12px] font-medium text-neutral-400 transition-colors hover:text-ink"
-              >
-                <Share2 className="h-3.5 w-3.5" aria-hidden />
-                Share
-              </button>
-            </div>
-
-            {/* Trust */}
-            <p className="text-center text-[10.5px] text-neutral-400">
-              {freeThreshold > 0
-                ? `Free delivery over ${formatPrice(freeThreshold, product.currency)}`
-                : "Cash on delivery"}
-              {" · "}7-day returns{" · "}Secure checkout
-            </p>
           </div>
-
-          {/* Description — inline expand/collapse */}
-          {product.description ? (
-            <div>
-              <div
-                className={cn(
-                  "relative overflow-hidden text-[13px] leading-relaxed text-neutral-500 transition-[max-height] duration-500 sm:text-sm",
-                  !descExpanded ? "max-h-[76px]" : "max-h-[2000px]",
-                )}
-              >
-                <Markdown content={product.description} />
-                {!descExpanded ? (
-                  <div className="absolute inset-x-0 bottom-0 h-[32px] bg-gradient-to-t from-paper to-transparent" />
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => setDescExpanded((p) => !p)}
-                className="mt-1 text-[11px] font-medium text-neutral-400 underline underline-offset-2 transition-colors hover:text-ink"
-              >
-                {descExpanded ? "Show less" : "Show more"}
-              </button>
-            </div>
-          ) : null}
 
           {/* Jersey customizer */}
           {isJerseyProduct ? (
-            <div>
+            <div className="mt-[20px]">
               <JerseyCustomizer
                 value={personalization}
                 onChange={setPersonalization}
@@ -1722,60 +1540,99 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
             </div>
           ) : null}
 
-          {/* Highlights — quick facts card, only rendered when the seller actually entered attributes */}
-          {product.attributes && Object.keys(product.attributes).length > 0 ? (
-            <div className="rounded-xl border border-neutral-200 p-[16px]">
-              <h2 className="text-[16px] font-bold text-neutral-900">Highlights</h2>
-              <dl className="mt-[6px] flex flex-col divide-y divide-neutral-100">
-                {Object.entries(product.attributes)
-                  .slice(0, 8)
-                  .map(([k, v]) => (
-                    <InfoRow key={k} label={k}>{v}</InfoRow>
-                  ))}
-              </dl>
-            </div>
-          ) : null}
-
-          {/* Information — policy + seller facts, real data only (nothing fabricated) */}
-          <div className="rounded-xl border border-neutral-200 p-[16px]">
-            <h2 className="text-[16px] font-bold text-neutral-900">Information</h2>
-            <dl className="mt-[6px] flex flex-col divide-y divide-neutral-100">
-              <InfoRow label="Disclaimer">
-                Product images are for representational purposes only. Please refer to the product
-                packaging for exact details, ingredients, and usage instructions before use.
-              </InfoRow>
-              {siteSettings?.contact?.email || siteSettings?.contact?.phone ? (
-                <InfoRow label="Customer Care Details">
-                  {siteSettings.contact?.email ? (
-                    <>
-                      Email: {siteSettings.contact.email}
-                      <br />
-                    </>
-                  ) : null}
-                  {siteSettings.contact?.phone ? <>Phone: {siteSettings.contact.phone}</> : null}
-                </InfoRow>
-              ) : null}
-              {sellerRef?.name ? (
-                <InfoRow label="Seller Name">
-                  {sellerRef.storeSlug ? (
-                    <Link href={`/store/${sellerRef.storeSlug}`} className="hover:underline">
-                      {sellerRef.name}
-                    </Link>
-                  ) : (
-                    sellerRef.name
-                  )}
-                </InfoRow>
-              ) : null}
-              {product.sku ? (
-                <InfoRow label="SKU">
-                  <span className="break-all font-mono">{product.sku}</span>
-                </InfoRow>
-              ) : null}
-              {countryOfOrigin ? <InfoRow label="Country Of Origin">{countryOfOrigin}</InfoRow> : null}
-              {shelfLife ? <InfoRow label="Shelf Life">{shelfLife}</InfoRow> : null}
-            </dl>
+          {/* Size Guide / Description accordions */}
+          <div className="mt-[24px]">
+            <AccordionRow title="Size Guide">
+              <SizeChartTable chart={sizeChart} />
+            </AccordionRow>
+            {product.description ? (
+              <AccordionRow title="Description">
+                <Markdown
+                  content={product.description}
+                  className="text-[14px] leading-relaxed text-neutral-600"
+                />
+              </AccordionRow>
+            ) : null}
           </div>
 
+          {/* Short description — e.g. "The model is 6.2", weighs 80kg..." */}
+          {product.shortDescription ? (
+            <p className="mt-[20px] text-[15px] leading-relaxed text-neutral-800">
+              {product.shortDescription}
+            </p>
+          ) : null}
+
+          {/* Free shipping */}
+          <div className="mt-[16px]">
+            {freeThreshold === 0 || qualifiesForFree ? (
+              <div className="flex items-center gap-[10px] text-[14px] font-medium text-neutral-900">
+                <Truck className="h-[20px] w-[20px]" aria-hidden />
+                Free Shipping
+                <span
+                  title={
+                    freeThreshold > 0
+                      ? `Free shipping on orders over ${formatPrice(freeThreshold, product.currency)}`
+                      : "Free shipping on this order"
+                  }
+                >
+                  <HelpCircle className="h-[15px] w-[15px] text-neutral-400" aria-hidden />
+                </span>
+              </div>
+            ) : (
+              <p className="flex items-center gap-[10px] text-[13px] text-neutral-600">
+                <Truck className="h-[18px] w-[18px] text-neutral-500" aria-hidden />
+                Add{" "}
+                <span className="font-semibold text-neutral-900">
+                  {formatPrice(amountToFree, product.currency)}
+                </span>{" "}
+                more for free shipping
+              </p>
+            )}
+          </div>
+
+          {/* CTAs */}
+          <div ref={ctaRef} className="mt-[20px] flex flex-col gap-[12px]">
+            <div className="flex items-stretch gap-[12px]">
+              <button
+                type="button"
+                onClick={onAddToCart}
+                disabled={outOfStock}
+                className="h-[52px] flex-1 bg-neutral-900 text-[14px] font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-neutral-800 active:bg-neutral-950 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {outOfStock ? "Out of Stock" : "Add to Cart"}
+              </button>
+              <button
+                type="button"
+                onClick={onToggleWishlist}
+                aria-label={inWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                aria-pressed={inWishlist}
+                className={cn(
+                  "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border transition-colors",
+                  inWishlist
+                    ? "border-neutral-900 text-red-500"
+                    : "border-neutral-300 text-neutral-700 hover:border-neutral-900 hover:text-neutral-900",
+                )}
+              >
+                <Heart className={cn("h-[20px] w-[20px]", inWishlist && "fill-red-500 text-red-500")} aria-hidden />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onBuyNow}
+              disabled={outOfStock}
+              className="h-[52px] w-full border border-neutral-400 bg-white text-[14px] font-medium uppercase tracking-[0.12em] text-neutral-900 transition-colors hover:border-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Buy It Now
+            </button>
+
+            {/* Trust line */}
+            <p className="text-center text-[11px] text-neutral-400">
+              {freeThreshold > 0
+                ? `Free delivery over ${formatPrice(freeThreshold, product.currency)}`
+                : "Cash on delivery"}
+              {" · "}7-day returns{" · "}Secure checkout
+            </p>
+          </div>
         </div>
       </div>
 
@@ -1786,26 +1643,26 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
       <div
         aria-hidden={!ctaEverVisible || ctaVisible || bottomPassed}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 border-t border-neutral-200 bg-paper/95 backdrop-blur-sm lg:hidden",
+          "fixed inset-x-0 bottom-0 z-50 border-t border-neutral-200 bg-white/95 backdrop-blur-sm lg:hidden",
           "transition-transform duration-300 ease-out",
           ctaEverVisible && !ctaVisible && !bottomPassed ? "translate-y-0" : "translate-y-full",
         )}
       >
         <div className="mx-auto flex w-full items-center gap-2 px-2 pt-[12px]" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
           {heroImage ? (
-            <div className="relative h-[40px] w-[40px] shrink-0 overflow-hidden rounded-lg border border-neutral-200">
+            <div className="relative h-[40px] w-[40px] shrink-0 overflow-hidden border border-neutral-200">
               <Image src={heroImage.url} alt="" fill sizes="40px" className="object-cover" />
             </div>
           ) : null}
           <div className="flex min-w-0 flex-1 flex-col">
             <p className="truncate text-[11px] text-neutral-500">{product.title}</p>
-            <p className="text-sm font-bold text-ink">{formatPrice(totalPrice, product.currency)}</p>
+            <p className="text-sm font-bold text-neutral-900">{formatPrice(totalPrice, product.currency)}</p>
           </div>
           <button
             type="button"
             onClick={onAddToCart}
             disabled={outOfStock}
-            className="flex h-[40px] shrink-0 items-center gap-1.5 rounded-xl bg-accent px-4 text-[12px] font-bold uppercase tracking-wide text-white transition-all hover:bg-accent/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-[42px] shrink-0 items-center gap-1.5 bg-neutral-900 px-4 text-[12px] font-semibold uppercase tracking-wide text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShoppingCart className="h-4 w-4" aria-hidden />
             {outOfStock ? "Out of stock" : "Add to Cart"}
@@ -1816,28 +1673,27 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
       {/*
         Top sticky mini-bar (desktop) - the gallery's `md:sticky` keeps it in
         view while scrolling the initial fold, but once the buy block scrolls
-        away entirely (Highlights/Information/reviews/related products), this
-        persists so Add to Cart is always reachable - matches the reference
-        pattern of a slim thumbnail+title+price+CTA strip pinned under the
-        navbar. Desktop-only; the bottom bar above already covers mobile.
+        away entirely (reviews / related products), this persists so Add to
+        Cart is always reachable. Desktop-only; the bottom bar above already
+        covers mobile.
       */}
       <div
         aria-hidden={!ctaEverVisible || ctaVisible}
         style={{ top: navbarHeight }}
         className={cn(
-          "fixed inset-x-0 z-30 hidden border-b border-neutral-200 bg-paper/95 shadow-sm backdrop-blur-sm lg:flex",
+          "fixed inset-x-0 z-30 hidden border-b border-neutral-200 bg-white/95 shadow-sm backdrop-blur-sm lg:flex",
           "transition-transform duration-300 ease-out",
           ctaEverVisible && !ctaVisible ? "translate-y-0" : "-translate-y-full",
         )}
       >
         <div className="mx-auto flex w-full items-center gap-3 py-[10px] lg:w-[82%]">
           {heroImage ? (
-            <div className="relative h-[40px] w-[40px] shrink-0 overflow-hidden rounded-lg border border-neutral-200">
+            <div className="relative h-[40px] w-[40px] shrink-0 overflow-hidden border border-neutral-200">
               <Image src={heroImage.url} alt="" fill sizes="40px" className="object-cover" />
             </div>
           ) : null}
           <p className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-900">{product.title}</p>
-          <span className="rounded-[6px] bg-green-700 px-[10px] py-[4px] text-[14px] font-bold leading-none text-white">
+          <span className="text-[15px] font-bold text-neutral-900">
             {formatPrice(totalPrice, product.currency)}
           </span>
           {onSale ? (
@@ -1849,7 +1705,7 @@ export function ProductDetailClient({ product, customizationConfig, siteSettings
             type="button"
             onClick={onAddToCart}
             disabled={outOfStock}
-            className="ml-2 flex h-[40px] shrink-0 items-center gap-[8px] rounded-lg bg-accent px-[20px] text-[14px] font-semibold text-white transition-all hover:bg-accent-dark active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+            className="ml-2 flex h-[40px] shrink-0 items-center gap-[8px] bg-neutral-900 px-[20px] text-[13px] font-semibold uppercase tracking-wide text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ShoppingCart className="h-[16px] w-[16px]" aria-hidden />
             {outOfStock ? "Out of stock" : "Add to Cart"}

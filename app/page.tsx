@@ -7,20 +7,14 @@ import type {
   SubCategory,
   ChildCategory,
 } from "@/components/layout";
-import {
-  CategoryTiles,
-  HomeCategoryShowcase,
-  HomeBanner,
-  ProductRow,
-  OfferBannerCarousel,
-} from "@/components/composed";
+import { HomeCategoryShowcase, HomeBanner } from "@/components/composed";
 import type { HomeCategoryShowcaseTile, HomeBannerSlide } from "@/components/composed";
 import { OrganizationJsonLd, WebsiteJsonLd } from "@/components/seo";
 import { homeMetadata } from "@/lib/seo/metadata";
 import { COMPANY } from "@/lib/entity/company";
 import { getSiteSettings } from "@/lib/siteSettings.server";
 import type { ApiResponse } from "@/types/api";
-import type { BrandDetail, CategoryTreeNode, ProductSummary } from "@/types/catalog";
+import type { BrandDetail, CategoryTreeNode } from "@/types/catalog";
 import type { Offer, OfferBanner, PublicListOffersResponse } from "@/types/offer";
 import type { HomeCategoryShowcaseCategoryRef, SiteSettingsHomeBannerSlide } from "@/types/siteSettings";
 
@@ -57,41 +51,8 @@ async function fetchBrands(): Promise<BrandDetail[]> {
   }
 }
 
-async function fetchFeaturedProducts(): Promise<ProductSummary[]> {
-  try {
-    const res = await axios.get<ApiResponse<ProductSummary[]>>(
-      `${API_URL}/api/products/featured`,
-      { params: { limit: 8 }, timeout: 8000 },
-    );
-    return res.data.success ? res.data.data : [];
-  } catch {
-    return [];
-  }
-}
 
-async function fetchNewArrivals(): Promise<ProductSummary[]> {
-  try {
-    const res = await axios.get<ApiResponse<ProductSummary[]>>(
-      `${API_URL}/api/products`,
-      { params: { sort: "newest", limit: 8 }, timeout: 8000 },
-    );
-    return res.data.success ? res.data.data : [];
-  } catch {
-    return [];
-  }
-}
 
-async function fetchProductsByCategoryPath(path: string, limit = 8): Promise<ProductSummary[]> {
-  try {
-    const res = await axios.get<ApiResponse<ProductSummary[]>>(
-      `${API_URL}/api/products`,
-      { params: { categoryPath: path, sort: "newest", limit }, timeout: 8000 },
-    );
-    return res.data.success ? res.data.data : [];
-  } catch {
-    return [];
-  }
-}
 
 async function fetchHomepageOffers(): Promise<Offer[]> {
   try {
@@ -133,15 +94,16 @@ function toNavCategory(node: CategoryTreeNode): CategoryNode {
 /* ───────────────────── Page ───────────────────── */
 
 export default async function HomePage() {
-  const [categoryTree, brandList, featured, newArrivals, liveOffers, siteSettings] =
-    await Promise.all([
-      fetchCategoryTree(),
-      fetchBrands(),
-      fetchFeaturedProducts(),
-      fetchNewArrivals(),
-      fetchHomepageOffers(),
-      getSiteSettings(),
-    ]);
+  // The homepage is a cover page - banner plus the top-categories grid. It
+  // deliberately lists no products, so nothing here fetches any: the previous
+  // version fired up to 26 product requests per render to fill rows that are
+  // now gone.
+  const [categoryTree, brandList, liveOffers, siteSettings] = await Promise.all([
+    fetchCategoryTree(),
+    fetchBrands(),
+    fetchHomepageOffers(),
+    getSiteSettings(),
+  ]);
 
   // Homepage "shop by category" strip - admin-managed at /admin/offers.
   // Active tiles, sorted by order, category ref resolved to a /category/:path
@@ -163,16 +125,17 @@ export default async function HomePage() {
       };
     });
 
-  // Homepage banner - one ordered, active-only slide list, admin-managed at
-  // /admin/offers. Renders directly under the navbar.
-  const homeBannerSlides: HomeBannerSlide[] = (siteSettings?.homeBanner ?? [])
-    .filter((item: SiteSettingsHomeBannerSlide) => item.isActive && item.image)
-    .sort((a: SiteSettingsHomeBannerSlide, b: SiteSettingsHomeBannerSlide) => a.order - b.order)
-    .map((item: SiteSettingsHomeBannerSlide) => ({
-      key: item._id,
-      image: item.image,
-      href: item.href || undefined,
-    }));
+  // The two homepage banner carousels, both admin-managed at /admin/offers:
+  // one above the category grid, one below it. Active slides only, in the
+  // order the admin arranged them.
+  const toBannerSlides = (items: SiteSettingsHomeBannerSlide[] | undefined): HomeBannerSlide[] =>
+    (items ?? [])
+      .filter((item) => item.isActive && item.image)
+      .sort((a, b) => a.order - b.order)
+      .map((item) => ({ key: item._id, image: item.image, href: item.href || undefined }));
+
+  const homeBannerSlides = toBannerSlides(siteSettings?.homeBanner);
+  const homeBannerSecondarySlides = toBannerSlides(siteSettings?.homeBannerSecondary);
 
   const navCategories = categoryTree.map(toNavCategory);
   const navBrands: BrandLite[] = brandList.map((b) => ({
@@ -181,28 +144,6 @@ export default async function HomePage() {
     logo: b.logo,
   }));
 
-  const MAX_SUBCATEGORY_ROWS = 24;
-  const subPairs = categoryTree
-    .flatMap((parent) => (parent.children ?? []).map((sub) => ({ parent, sub })))
-    .slice(0, MAX_SUBCATEGORY_ROWS);
-
-  const subProducts = await Promise.all(
-    subPairs.map(({ sub }) => fetchProductsByCategoryPath(sub.path, 8)),
-  );
-
-  const categorySections = (() => {
-    const byParent = new Map<
-      string,
-      { parent: CategoryTreeNode; rows: { sub: CategoryTreeNode; products: ProductSummary[] }[] }
-    >();
-    subPairs.forEach(({ parent, sub }, i) => {
-      const products = subProducts[i] ?? [];
-      if (products.length === 0) return;
-      if (!byParent.has(parent._id)) byParent.set(parent._id, { parent, rows: [] });
-      byParent.get(parent._id)!.rows.push({ sub, products });
-    });
-    return Array.from(byParent.values()).filter((s) => s.rows.length > 0);
-  })();
 
   const carouselOffers = liveOffers.filter((o) => o.showOnHomepage);
 
@@ -228,60 +169,19 @@ export default async function HomePage() {
           profile, sticky search + category tabs, offer banner. */}
       <MobileHomeHeader categories={navCategories} banners={homepageBanners} />
 
-      {/* Homepage banner - one full-width carousel directly under the header,
-          admin-managed at /admin/offers. Renders nothing when no slides are
-          active, so the category strip simply moves up. */}
-      <HomeBanner slides={homeBannerSlides} />
+      {/* The whole page: banner, categories, second banner. No product rows and
+          no offer carousel - browsing starts from a category, not from the
+          homepage. Each block renders nothing when its admin list is empty, so
+          the page collapses gracefully rather than leaving a hole. All three
+          are managed at /admin/offers.
 
-      {/* Shop-by-category strip - admin-managed at /admin/offers */}
-      <HomeCategoryShowcase items={homeCategoryShowcaseTiles} />
-
-      {/* Offer carousel - full bleed on desktop; on mobile it already renders
-          inside the purple MobileHomeHeader block. */}
-      {homepageBanners.length > 0 ? (
-        <div className="hidden lg:block">
-          <OfferBannerCarousel banners={homepageBanners} />
-        </div>
-      ) : null}
-
-      <main className="container-screen flex flex-1 flex-col gap-4 py-3 md:gap-6 md:py-5">
-        {/* Category collection tiles — "Shop by Collection" hidden on home page (kept for later use) */}
-        {/* {categoryTree.length > 0 ? (
-          <CategoryTiles categories={categoryTree} limit={8} />
-        ) : null} */}
-
-        {/* Featured products */}
-        {featured.length > 0 ? (
-          <ProductRow
-            title="Featured"
-            products={featured}
-            viewAllHref="/all-products?sort=popular"
-          />
-        ) : null}
-
-        {/* New arrivals */}
-        {newArrivals.length > 0 ? (
-          <ProductRow
-            title="New Arrivals"
-            products={newArrivals}
-            viewAllHref="/all-products?sort=newest"
-          />
-        ) : null}
-
-        {/* Per-category rows */}
-        {categorySections.map(({ parent, rows }) => (
-          <section key={parent._id} className="flex flex-col gap-2 md:gap-3">
-            <h2 className="text-[22px] font-extrabold leading-tight text-ink sm:text-[26px]">{parent.name}</h2>
-            {rows.map(({ sub, products }) => (
-              <ProductRow
-                key={sub._id}
-                title={sub.name}
-                products={products}
-                viewAllHref={`/category/${sub.path}`}
-              />
-            ))}
-          </section>
-        ))}
+          Only the top banner loads eagerly: it is the LCP element. The lower
+          one is below the fold on every realistic viewport, so it stays lazy
+          instead of competing for bandwidth during first paint. */}
+      <main className="flex flex-1 flex-col">
+        <HomeBanner slides={homeBannerSlides} />
+        <HomeCategoryShowcase items={homeCategoryShowcaseTiles} />
+        <HomeBanner slides={homeBannerSecondarySlides} eager={false} />
       </main>
 
       <Footer />
